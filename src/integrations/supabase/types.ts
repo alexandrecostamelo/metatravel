@@ -14,7 +14,101 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      buscas_log: {
+        Row: {
+          cabine: string
+          criado_em: string
+          data_ida: string
+          data_volta: string | null
+          destino: string
+          id: number
+          origem: string
+          total_ofertas: number
+          user_id: string | null
+        }
+        Insert: {
+          cabine: string
+          criado_em?: string
+          data_ida: string
+          data_volta?: string | null
+          destino: string
+          id?: never
+          origem: string
+          total_ofertas?: number
+          user_id?: string | null
+        }
+        Update: {
+          cabine?: string
+          criado_em?: string
+          data_ida?: string
+          data_volta?: string | null
+          destino?: string
+          id?: never
+          origem?: string
+          total_ofertas?: number
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      cotacoes_milheiro: {
+        Row: {
+          fonte: string
+          id: number
+          programa_id: number
+          valor_brl: number
+          vigente_desde: string
+        }
+        Insert: {
+          fonte?: string
+          id?: never
+          programa_id: number
+          valor_brl: number
+          vigente_desde?: string
+        }
+        Update: {
+          fonte?: string
+          id?: never
+          programa_id?: number
+          valor_brl?: number
+          vigente_desde?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cotacoes_milheiro_programa_id_fkey"
+            columns: ["programa_id"]
+            isOneToOne: false
+            referencedRelation: "programas_milhas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      programas_milhas: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          id: number
+          moeda_taxas_default: string
+          nome: string
+          slug: string
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          id?: never
+          moeda_taxas_default?: string
+          nome: string
+          slug: string
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          id?: never
+          moeda_taxas_default?: string
+          nome?: string
+          slug?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
