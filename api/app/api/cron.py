@@ -19,18 +19,28 @@ from app.services.cache import cache_set
 router = APIRouter()
 
 COTACOES_REFERENCIA: dict[str, float] = {
-    "smiles": 16.00,
-    "azul": 15.00,
-    "latam_pass": 25.00,
-    "tap": 40.00,
-    "aeroplan": 45.00,
-    "avios_qatar": 56.00,
-    "avios_iberia": 56.00,
-    "avios_british": 58.00,
-    "flying_blue": 50.00,
-    "united": 48.00,
-    "aadvantage": 48.00,
-    "finnair_plus": 52.00,
+    # Programas brasileiros
+    "smiles":         16.00,
+    "azul":           15.00,
+    "latam_pass":     25.00,
+    # Programas internacionais — seats.aero
+    "aadvantage":     48.00,
+    "aeroplan":       45.00,
+    "alaska":         45.00,
+    "avios_british":  58.00,
+    "avios_iberia":   56.00,
+    "avios_qatar":    56.00,
+    "emirates":       55.00,
+    "etihad":         52.00,
+    "finnair_plus":   52.00,
+    "flying_blue":    50.00,
+    "lufthansa":      55.00,
+    "qantas":         50.00,
+    "singapore":      65.00,
+    "tap":            40.00,
+    "turkish":        45.00,
+    "united":         48.00,
+    "virgin_atlantic":48.00,
 }
 
 MOEDAS_PTAX = ["USD", "EUR", "GBP", "CAD"]

@@ -27,6 +27,32 @@ _CABINE_PREFIX = {
     Cabine.PRIMEIRA: "F",
 }
 
+# Mapeamento do campo Route.Source do seats.aero → slug do banco
+# Verificado empiricamente em 2026-04-09 via buscas reais na API
+SOURCE_SLUG_MAP: dict[str, str] = {
+    "aeroplan":      "aeroplan",
+    "american":      "aadvantage",
+    "alaska":        "alaska",
+    "azul":          "azul",
+    "emirates":      "emirates",
+    "etihad":        "etihad",
+    "finnair":       "finnair_plus",
+    "flyingblue":    "flying_blue",
+    "iberia":        "avios_iberia",
+    "british":       "avios_british",
+    "lufthansa":     "lufthansa",
+    "qantas":        "qantas",
+    "qatar":         "avios_qatar",
+    "singapore":     "singapore",
+    "tap":           "tap",
+    "turkish":       "turkish",
+    "united":        "united",
+    "virginatlantic":"virgin_atlantic",
+    # programas brasileiros (via Moblix futuramente)
+    "smiles":        "smiles",
+    "latam":         "latam_pass",
+}
+
 
 class SeatsAeroAdapter(BaseAdapter):
     nome = "seats_aero"
@@ -82,7 +108,7 @@ class SeatsAeroAdapter(BaseAdapter):
                 origem = route.get("OriginAirport") or req.origem
                 destino = route.get("DestinationAirport") or req.destino
                 cia = route.get("Source") or "??"
-                source_slug = cia.lower()
+                source_slug = SOURCE_SLUG_MAP.get(cia.lower(), cia.lower())
 
                 milhas_raw = item.get(f"{prefix}MileageCost") or 0
                 taxas_raw = item.get(f"{prefix}TotalTaxes") or 0
