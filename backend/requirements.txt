@@ -1,0 +1,20 @@
+# Framework web e servidor ASGI
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Validação/serialização e configuração via env
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# ORM assíncrono e driver Postgres
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+
+# Cliente HTTP assíncrono (para chamar APIs externas em paralelo)
+httpx==0.28.1
+
+# Cache Redis
+redis==5.2.1
+
+# Logs estruturados (útil desde o início)
+structlog==24.4.0
