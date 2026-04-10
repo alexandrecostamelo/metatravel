@@ -19,7 +19,8 @@ ADAPTERS: list[BaseAdapter] = [
 
 
 def _cache_key(req: BuscaRequest) -> str:
-    payload = f"{req.origem}:{req.destino}:{req.data_ida}:{req.data_volta}:{req.cabine}:{req.adultos}"
+    programas_str = ",".join(sorted(req.programas)) if req.programas else ""
+    payload = f"{req.origem}:{req.destino}:{req.data_ida}:{req.data_volta}:{req.cabine}:{req.adultos}:{programas_str}"
     digest = hashlib.sha256(payload.encode()).hexdigest()[:16]
     return f"busca:{digest}"
 
@@ -59,6 +60,11 @@ async def buscar_passagens(
             print(f"[orquestrador] adapter {adapter.nome} falhou: {resultado}")
             continue
         todas.extend(resultado)
+
+    # Filtra por programas se o usuário especificou
+    if req.programas:
+        slugs = set(req.programas)
+        todas = [o for o in todas if o.programa in slugs]
 
     todas = await valorar_ofertas(session, todas)
     print(f"[orquestrador] concluido, total={len(todas)}")

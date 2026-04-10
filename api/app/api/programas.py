@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -19,12 +20,13 @@ class ProgramaOut(BaseModel):
     moeda_taxas_default: str
     ativo: bool
     cotacao_atual_brl: Optional[Decimal] = None
+    cotacao_vigente_desde: Optional[datetime] = None
 
 
 @router.get("/api/programas", response_model=list[ProgramaOut])
 async def listar_programas(session: AsyncSession = Depends(get_session)) -> list[ProgramaOut]:
     stmt = (
-        select(ProgramaMilhas, CotacaoMilheiro.valor_brl)
+        select(ProgramaMilhas, CotacaoMilheiro.valor_brl, CotacaoMilheiro.vigente_desde)
         .outerjoin(
             CotacaoMilheiro,
             CotacaoMilheiro.programa_id == ProgramaMilhas.id,
@@ -36,7 +38,7 @@ async def listar_programas(session: AsyncSession = Depends(get_session)) -> list
 
     vistos: set[int] = set()
     resultado: list[ProgramaOut] = []
-    for programa, valor_brl in rows:
+    for programa, valor_brl, vigente_desde in rows:
         if programa.id in vistos:
             continue
         vistos.add(programa.id)
@@ -48,6 +50,7 @@ async def listar_programas(session: AsyncSession = Depends(get_session)) -> list
                 moeda_taxas_default=programa.moeda_taxas_default,
                 ativo=programa.ativo,
                 cotacao_atual_brl=valor_brl,
+                cotacao_vigente_desde=vigente_desde,
             )
         )
     return resultado

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -23,6 +23,7 @@ class BuscaLogOut(BaseModel):
     data_volta: Optional[date] = None
     cabine: str
     total_ofertas: int
+    criado_em: datetime
 
 
 class BuscasResponse(BaseModel):
@@ -66,6 +67,7 @@ async def minhas_buscas(
                 data_volta=b.data_volta,
                 cabine=b.cabine,
                 total_ofertas=b.total_ofertas,
+                criado_em=b.criado_em,
             )
             for b in items
         ],
