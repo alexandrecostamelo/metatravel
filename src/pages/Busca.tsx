@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plane } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Search, Plane, AlertCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { fetchProgramas, buscarPassagens, type Programa, type BuscaResponse } from "@/lib/api";
+import { toast } from "sonner";
 
 const cabines = [
   { value: "economica", label: "Econômica" },
@@ -27,24 +30,56 @@ const Busca = () => {
   });
   const [loading, setLoading] = useState(false);
 
+  // Programas from API
+  const [programas, setProgramas] = useState<Programa[]>([]);
+  const [programasLoading, setProgramasLoading] = useState(true);
+  const [selProgramas, setSelProgramas] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchProgramas()
+      .then((data) => {
+        const ativos = data.filter((p) => p.ativo);
+        setProgramas(ativos);
+        // All selected by default (empty = all on backend)
+        setSelProgramas([]);
+      })
+      .catch(() => {
+        toast.error("Não foi possível carregar os programas de milhas.");
+      })
+      .finally(() => setProgramasLoading(false));
+  }, []);
+
+  const togglePrograma = (slug: string) => {
+    setSelProgramas((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Simulated API call — will be replaced by real backend
-    await new Promise((r) => setTimeout(r, 800));
+    try {
+      const body: any = {
+        origem: form.origem.toUpperCase(),
+        destino: form.destino.toUpperCase(),
+        data_ida: form.dataIda,
+        cabine: form.cabine,
+        adultos: Number(form.passageiros),
+      };
+      if (form.dataVolta) body.data_volta = form.dataVolta;
+      if (selProgramas.length > 0) body.programas = selProgramas;
 
-    const params = new URLSearchParams({
-      origem: form.origem.toUpperCase(),
-      destino: form.destino.toUpperCase(),
-      dataIda: form.dataIda,
-      cabine: form.cabine,
-      pax: form.passageiros,
-      ...(form.dataVolta ? { dataVolta: form.dataVolta } : {}),
-    });
+      const resultado: BuscaResponse = await buscarPassagens(body);
 
-    setLoading(false);
-    navigate(`/resultados?${params.toString()}`);
+      navigate("/resultados", {
+        state: { resultado },
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao buscar passagens. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -133,6 +168,38 @@ const Busca = () => {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Filtro de programas */}
+            <div className="space-y-3">
+              <Label className="font-semibold">Programas de milhas</Label>
+              {programasLoading ? (
+                <p className="text-sm text-muted-foreground">Carregando programas...</p>
+              ) : programas.length === 0 ? (
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" /> Nenhum programa disponível
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {programas.map((p) => (
+                    <label key={p.slug} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <Checkbox
+                        checked={selProgramas.length === 0 || selProgramas.includes(p.slug)}
+                        onCheckedChange={() => togglePrograma(p.slug)}
+                      />
+                      <span className="text-foreground">{p.nome}</span>
+                      {p.cotacao_milheiro_brl != null && (
+                        <span className="text-muted-foreground text-xs">
+                          R${Number(p.cotacao_milheiro_brl).toFixed(0)}/mil
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
+              {selProgramas.length === 0 && programas.length > 0 && (
+                <p className="text-xs text-muted-foreground">Todos os programas selecionados</p>
+              )}
             </div>
 
             <Button type="submit" variant="gold" size="lg" className="w-full" disabled={loading}>

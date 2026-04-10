@@ -1,51 +1,54 @@
-import { useState, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useMemo } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ExternalLink, Filter } from "lucide-react";
+import { ExternalLink, ArrowLeft, SearchX } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { gerarMockResultados, type OfertaVoo } from "@/lib/mockResults";
+import type { BuscaResponse, Oferta } from "@/lib/api";
 
 const paradasLabel = (p: number) => (p === 0 ? "Direto" : p === 1 ? "1 parada" : `${p} paradas`);
 
-const formatBRL = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const formatBRL = (v: number | null) =>
+  v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
+
+const cabineLabel: Record<string, string> = {
+  economica: "Econômica",
+  premium_economica: "Premium Econômica",
+  executiva: "Executiva",
+  primeira: "Primeira",
+};
 
 const Resultados = () => {
-  const [searchParams] = useSearchParams();
-  const origem = searchParams.get("origem") ?? "";
-  const destino = searchParams.get("destino") ?? "";
-  const dataIda = searchParams.get("dataIda") ?? "";
+  const location = useLocation();
+  const navigate = useNavigate();
+  const resultado: BuscaResponse | undefined = location.state?.resultado;
 
-  const [ofertas] = useState<OfertaVoo[]>(() => gerarMockResultados());
-
-  // Filters
-  const programas = useMemo(() => [...new Set(ofertas.map((o) => o.programaSlug))], [ofertas]);
-  const [selProgramas, setSelProgramas] = useState<string[]>(programas);
-  const [maxParadas, setMaxParadas] = useState<number | null>(null);
-  const [orcamentoMax, setOrcamentoMax] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-
-  const filtered = useMemo(() => {
-    let r = ofertas.filter((o) => selProgramas.includes(o.programaSlug));
-    if (maxParadas !== null) r = r.filter((o) => o.paradas <= maxParadas);
-    if (orcamentoMax) r = r.filter((o) => o.custoTotal <= Number(orcamentoMax));
-    return r.sort((a, b) => a.custoTotal - b.custoTotal);
-  }, [ofertas, selProgramas, maxParadas, orcamentoMax]);
-
-  const togglePrograma = (slug: string) => {
-    setSelProgramas((prev) =>
-      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
+  const ofertas = useMemo(() => {
+    if (!resultado) return [];
+    return [...resultado.ofertas].sort(
+      (a, b) => (a.custo_total_brl ?? Infinity) - (b.custo_total_brl ?? Infinity)
     );
-  };
+  }, [resultado]);
 
-  const cotacaoInfo = ofertas[0];
-  const dataFormatada = dataIda
-    ? new Date(dataIda + "T00:00:00").toLocaleDateString("pt-BR")
-    : new Date().toLocaleDateString("pt-BR");
+  if (!resultado) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 pt-24 pb-12 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <SearchX className="h-12 w-12 text-muted-foreground mx-auto" />
+            <p className="text-muted-foreground">Nenhum resultado para exibir.</p>
+            <Button variant="outline" onClick={() => navigate("/busca")}>
+              <ArrowLeft className="h-4 w-4" /> Nova busca
+            </Button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  const dataFormatada = new Date(resultado.data_ida + "T00:00:00").toLocaleDateString("pt-BR");
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -54,136 +57,84 @@ const Resultados = () => {
         <div className="container mx-auto px-4">
           {/* Header */}
           <div className="mb-6">
+            <Button variant="ghost" size="sm" className="mb-3" onClick={() => navigate("/busca")}>
+              <ArrowLeft className="h-4 w-4" /> Voltar
+            </Button>
             <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-              {origem} → {destino}
+              {resultado.origem} → {resultado.destino}
             </h1>
             <p className="text-muted-foreground mt-1">
-              {dataFormatada} · {filtered.length} ofertas encontradas
+              {dataFormatada} · {cabineLabel[resultado.cabine] ?? resultado.cabine} · {resultado.total} oferta{resultado.total !== 1 ? "s" : ""} encontrada{resultado.total !== 1 ? "s" : ""}
             </p>
-            {cotacaoInfo && (
-              <div className="mt-3 bg-gold/10 border border-gold/20 rounded-lg px-4 py-2 inline-block">
-                <span className="text-sm text-foreground">
-                  Cotação aplicada: a partir de <strong>{formatBRL(15)}</strong>/milheiro — atualizada em{" "}
-                  {new Date().toLocaleDateString("pt-BR")}
-                </span>
-              </div>
+            {resultado.cache_hit && (
+              <span className="inline-block mt-2 text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
+                Resultado em cache
+              </span>
             )}
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-6">
-            {/* Filters - mobile toggle */}
-            <div className="lg:hidden">
-              <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-                <Filter className="h-4 w-4" /> Filtros
+          {/* Empty state */}
+          {resultado.total === 0 ? (
+            <div className="bg-card border border-border rounded-xl p-12 text-center">
+              <SearchX className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-foreground font-medium">Nenhuma oferta encontrada para esta rota</p>
+              <p className="text-muted-foreground text-sm mt-1">Tente alterar datas, cabine ou programas.</p>
+              <Button variant="outline" className="mt-4" onClick={() => navigate("/busca")}>
+                Nova busca
               </Button>
             </div>
-
-            {/* Sidebar filters */}
-            <aside className={`${showFilters ? "block" : "hidden"} lg:block lg:w-64 shrink-0 space-y-6`}>
-              <div className="bg-card border border-border rounded-xl p-5 space-y-5">
-                <div>
-                  <h3 className="font-semibold text-foreground mb-3">Programas</h3>
-                  <div className="space-y-2">
-                    {programas.map((slug) => {
-                      const oferta = ofertas.find((o) => o.programaSlug === slug);
-                      return (
-                        <label key={slug} className="flex items-center gap-2 cursor-pointer">
-                          <Checkbox
-                            checked={selProgramas.includes(slug)}
-                            onCheckedChange={() => togglePrograma(slug)}
-                          />
-                          <span className="text-sm text-foreground">{oferta?.programa}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-semibold text-foreground mb-3">Paradas</h3>
-                  <div className="space-y-2">
-                    {[
-                      { label: "Todas", value: null },
-                      { label: "Direto", value: 0 },
-                      { label: "Até 1", value: 1 },
-                      { label: "Até 2", value: 2 },
-                    ].map((opt) => (
-                      <label key={opt.label} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="paradas"
-                          checked={maxParadas === opt.value}
-                          onChange={() => setMaxParadas(opt.value)}
-                          className="accent-gold"
-                        />
-                        <span className="text-sm text-foreground">{opt.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="font-semibold">Orçamento máximo (R$)</Label>
-                  <Input
-                    type="number"
-                    placeholder="Ex: 3000"
-                    className="mt-2"
-                    value={orcamentoMax}
-                    onChange={(e) => setOrcamentoMax(e.target.value)}
-                  />
-                </div>
-              </div>
-            </aside>
-
-            {/* Results table */}
-            <div className="flex-1 overflow-x-auto">
-              {filtered.length === 0 ? (
-                <div className="bg-card border border-border rounded-xl p-12 text-center">
-                  <p className="text-muted-foreground">Nenhuma oferta encontrada com os filtros selecionados.</p>
-                </div>
-              ) : (
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left px-4 py-3 font-semibold text-foreground">Programa</th>
-                        <th className="text-left px-4 py-3 font-semibold text-foreground">Cia</th>
-                        <th className="text-center px-4 py-3 font-semibold text-foreground">Paradas</th>
-                        <th className="text-right px-4 py-3 font-semibold text-foreground">Milhas</th>
-                        <th className="text-right px-4 py-3 font-semibold text-foreground">Taxas</th>
-                        <th className="text-right px-4 py-3 font-semibold text-foreground">Custo Total</th>
-                        <th className="text-center px-4 py-3 font-semibold text-foreground"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((o, idx) => (
-                        <tr
-                          key={o.id}
-                          className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${idx === 0 ? "bg-gold/5" : ""}`}
-                        >
-                          <td className="px-4 py-3 font-medium text-foreground">{o.programa}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{o.companhia}</td>
-                          <td className="px-4 py-3 text-center text-muted-foreground">{paradasLabel(o.paradas)}</td>
-                          <td className="px-4 py-3 text-right font-mono text-foreground">
-                            {o.milhas.toLocaleString("pt-BR")}
-                          </td>
-                          <td className="px-4 py-3 text-right text-muted-foreground">{formatBRL(o.taxas)}</td>
-                          <td className="px-4 py-3 text-right font-bold text-foreground">{formatBRL(o.custoTotal)}</td>
-                          <td className="px-4 py-3 text-center">
-                            <a href={o.link} target="_blank" rel="noopener noreferrer">
+          ) : (
+            /* Results table */
+            <div className="overflow-x-auto">
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="text-left px-4 py-3 font-semibold text-foreground">Programa</th>
+                      <th className="text-left px-4 py-3 font-semibold text-foreground">Cia</th>
+                      <th className="text-center px-4 py-3 font-semibold text-foreground">Paradas</th>
+                      <th className="text-right px-4 py-3 font-semibold text-foreground">Milhas</th>
+                      <th className="text-right px-4 py-3 font-semibold text-foreground">Taxas</th>
+                      <th className="text-right px-4 py-3 font-semibold text-foreground">Custo Total</th>
+                      <th className="text-center px-4 py-3 font-semibold text-foreground"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ofertas.map((o, idx) => (
+                      <tr
+                        key={idx}
+                        className={`border-b border-border last:border-0 hover:bg-muted/30 transition-colors ${idx === 0 ? "bg-gold/5" : ""}`}
+                      >
+                        <td className="px-4 py-3 font-medium text-foreground">{o.programa}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{o.cia_aerea}</td>
+                        <td className="px-4 py-3 text-center text-muted-foreground">{paradasLabel(o.paradas)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-foreground">
+                          {o.milhas.toLocaleString("pt-BR")}
+                        </td>
+                        <td className="px-4 py-3 text-right text-muted-foreground">{formatBRL(o.taxas_brl)}</td>
+                        <td className="px-4 py-3 text-right font-bold text-foreground text-base">
+                          {formatBRL(o.custo_total_brl)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {o.link_reserva ? (
+                            <a href={o.link_reserva} target="_blank" rel="noopener noreferrer">
                               <Button variant="gold" size="sm">
                                 Reservar <ExternalLink className="h-3 w-3" />
                               </Button>
                             </a>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                          ) : (
+                            <Button variant="outline" size="sm" disabled>
+                              Indisponível
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </main>
       <Footer />
