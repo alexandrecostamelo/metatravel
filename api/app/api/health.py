@@ -20,13 +20,13 @@ async def health() -> dict[str, str]:
         print(f"[health] db falhou: {exc}")
         db_status = "fail"
 
-    # Verifica Redis
+    # Verifica Redis (SET + GET de chave temporária)
     try:
         client = _get_client()
         if client is None:
             cache_status = "unavailable"
         else:
-            client.ping()
+            client.set("health:ping", "1", ex=10)
     except Exception as exc:
         print(f"[health] cache falhou: {exc}")
         cache_status = "fail"

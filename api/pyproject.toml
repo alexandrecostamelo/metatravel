@@ -3,9 +3,14 @@ name = "passagens-milhas-api"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
-    "pydantic>=2.10",
-    "pydantic-settings>=2.7",
-    "httpx>=0.28",
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.32.1",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.0",
+    "httpx==0.28.1",
+    "sqlalchemy[asyncio]==2.0.36",
+    "asyncpg==0.30.0",
+    "pyjwt[crypto]==2.10.1",
+    "cryptography>=42.0.0",
+    "upstash-redis==1.2.0",
 ]
