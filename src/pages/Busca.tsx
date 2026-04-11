@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Search, Plane, AlertCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import AirportInput from "@/components/AirportInput";
 import { fetchProgramas, buscarPassagens, type Programa, type BuscaResponse } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -98,27 +99,21 @@ const Busca = () => {
           <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-6 md:p-8 space-y-5 shadow-sm">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="origem">Origem (IATA)</Label>
-                <Input
+                <Label htmlFor="origem">Origem</Label>
+                <AirportInput
                   id="origem"
-                  placeholder="GRU"
-                  maxLength={3}
-                  required
                   value={form.origem}
-                  onChange={(e) => setForm({ ...form, origem: e.target.value.toUpperCase() })}
-                  className="uppercase"
+                  onChange={(iata) => setForm({ ...form, origem: iata })}
+                  placeholder="GRU — São Paulo"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="destino">Destino (IATA)</Label>
-                <Input
+                <Label htmlFor="destino">Destino</Label>
+                <AirportInput
                   id="destino"
-                  placeholder="MIA"
-                  maxLength={3}
-                  required
                   value={form.destino}
-                  onChange={(e) => setForm({ ...form, destino: e.target.value.toUpperCase() })}
-                  className="uppercase"
+                  onChange={(iata) => setForm({ ...form, destino: iata })}
+                  placeholder="MIA — Miami"
                 />
               </div>
             </div>
