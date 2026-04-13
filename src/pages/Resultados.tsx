@@ -200,67 +200,155 @@ function formatDuration(mins: number | null): string {
   if (!mins) return "";
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return h > 0 ? `${h}h${m > 0 ? ` ${m}min` : ""}` : `${m}min`;
+  return h > 0 ? `${h}h ${m > 0 ? `${m}min` : ""}`.trim() : `${m}min`;
+}
+
+function formatMilhas(m: number): string {
+  if (m >= 1000) {
+    const k = m / 1000;
+    return (k % 1 === 0 ? k.toString() : k.toFixed(1)) + "k pts";
+  }
+  return m + " pts";
+}
+
+function layoverMinutes(arrTime: string, depTime: string): number {
+  const [ah, am] = arrTime.split(":").map(Number);
+  const [dh, dm] = depTime.split(":").map(Number);
+  let diff = dh * 60 + dm - (ah * 60 + am);
+  if (diff <= 0) diff += 1440;
+  return diff;
 }
 
 function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa: string }) {
-  const seg = trip.segmentos[0];
+  const [expanded, setExpanded] = useState(false);
+
+  const firstSeg = trip.segmentos[0];
+  const lastSeg = trip.segmentos[trip.segmentos.length - 1];
+  const depTime = firstSeg?.partida || "—";
+  const arrTime = lastSeg?.chegada || "—";
+
+  // All airports in route order: GRU → AJU → REC
+  const allAirports: string[] = [trip.origem];
+  for (const s of trip.segmentos) {
+    if (allAirports[allAirports.length - 1] !== s.destino) allAirports.push(s.destino);
+  }
+  if (allAirports[allAirports.length - 1] !== trip.destino) allAirports.push(trip.destino);
+
+  const nextDay = depTime !== "—" && arrTime !== "—" && arrTime < depTime;
+
+  const flightNums = trip.segmentos.map((s) => s.numero_voo).filter(Boolean).join(", ");
+
+  const taxasStr =
+    trip.taxas_valor > 0
+      ? trip.taxas_moeda === "BRL"
+        ? `R$ ${trip.taxas_valor.toFixed(2).replace(".", ",")}`
+        : `$${trip.taxas_valor.toFixed(2)} ${trip.taxas_moeda}`
+      : null;
+
   return (
-    <div className="border border-border rounded-xl p-4 space-y-3 hover:border-primary/50 transition-colors">
-      {/* Rota + horários */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-center min-w-[48px]">
-          <p className="text-lg font-bold text-foreground">{seg?.partida || "—"}</p>
-          <p className="text-xs text-muted-foreground font-mono">{trip.origem}</p>
+    <div className="border-b border-border last:border-0">
+      <div className="flex items-start gap-3 py-4">
+        {/* Airline logo */}
+        <div className="flex-shrink-0 w-9 flex justify-center pt-0.5">
+          <AirlineLogo programa={programa} size="sm" />
         </div>
-        <div className="flex-1 flex flex-col items-center gap-0.5">
-          <div className="flex items-center gap-1 w-full">
-            <div className="h-px flex-1 bg-border" />
-            <PlaneTakeoff className="h-3.5 w-3.5 text-muted-foreground" />
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full text-white ${trip.paradas === 0 ? "bg-green-600" : "bg-blue-600"}`}>
-            {trip.paradas === 0 ? "Direto" : `${trip.paradas} parada${trip.paradas > 1 ? "s" : ""}`}
-          </span>
-          {trip.duracao_minutos && (
-            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-              <Clock className="h-3 w-3" />{formatDuration(trip.duracao_minutos)}
+
+        {/* Flight info */}
+        <div className="flex-1 min-w-0">
+          {/* Route + times */}
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className="font-bold text-base text-foreground">
+              {depTime} {allAirports.join(" → ")} {arrTime}
             </span>
-          )}
+            {nextDay && <span className="text-xs text-orange-500 font-semibold">+1d</span>}
+          </div>
+          {/* Flight numbers + duration */}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 flex-wrap">
+            {flightNums && <span className="font-mono">{flightNums}</span>}
+            {flightNums && trip.paradas > 0 && <span>|</span>}
+            {trip.paradas > 0 && <span>⧖ conexão</span>}
+            {trip.duracao_minutos && (
+              <>
+                <span>|</span>
+                <span className="flex items-center gap-0.5">
+                  <Clock className="h-3 w-3" />
+                  {formatDuration(trip.duracao_minutos)}
+                </span>
+              </>
+            )}
+          </div>
+          {/* Buttons */}
+          <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="inline-flex items-center gap-1 text-xs text-blue-500 border border-blue-300 dark:border-blue-700 rounded-full px-3 py-1 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors"
+            >
+              <PlaneTakeoff className="h-3 w-3" />
+              Detalhes {expanded ? "▲" : "▼"}
+            </button>
+            {trip.link_reserva ? (
+              <a href={trip.link_reserva} target="_blank" rel="noopener noreferrer">
+                <span className="inline-flex items-center gap-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-full px-3 py-1 cursor-pointer transition-colors">
+                  <ExternalLink className="h-3 w-3" /> Opções de reserva
+                </span>
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-full px-3 py-1 opacity-50">
+                Indisponível
+              </span>
+            )}
+          </div>
         </div>
-        <div className="text-center min-w-[48px]">
-          <p className="text-lg font-bold text-foreground">{seg?.chegada || "—"}</p>
-          <p className="text-xs text-muted-foreground font-mono">{trip.destino}</p>
-        </div>
-        <div className="text-right ml-2">
-          <p className="text-base font-bold text-foreground">{trip.milhas.toLocaleString("pt-BR")} pts</p>
-          {trip.taxas_valor > 0 && (
-            <p className="text-xs text-muted-foreground">
-              + {trip.taxas_moeda === "BRL"
-                ? `R$ ${trip.taxas_valor.toFixed(2).replace(".", ",")}`
-                : `${trip.taxas_moeda} ${trip.taxas_valor.toFixed(2)}`}
-            </p>
+
+        {/* Cost + stops */}
+        <div className="flex-shrink-0 text-right space-y-0.5 min-w-[90px]">
+          <p className="font-bold text-foreground">{formatMilhas(trip.milhas)}</p>
+          {taxasStr && <p className="text-xs text-muted-foreground">+ {taxasStr}</p>}
+          {trip.assentos != null && (
+            <p className="text-xs text-muted-foreground">{trip.assentos} assentos</p>
           )}
+          <div>
+            <span
+              className={`inline-block text-xs font-semibold px-2 py-0.5 rounded text-white ${
+                trip.paradas === 0 ? "bg-green-600" : "bg-blue-500"
+              }`}
+            >
+              {trip.paradas === 0 ? "Direto" : `${trip.paradas} parada${trip.paradas > 1 ? "s" : ""}`}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Número de voo */}
-      {seg?.numero_voo && (
-        <p className="text-xs text-muted-foreground font-mono">Voo {seg.numero_voo}</p>
-      )}
-
-      {/* Botão reservar */}
-      {trip.link_reserva ? (
-        <a href={trip.link_reserva} target="_blank" rel="noopener noreferrer" className="block">
-          <Button variant="gold" size="sm" className="w-full">
-            <ExternalLink className="h-3.5 w-3.5" />
-            Reservar via {nome}
-          </Button>
-        </a>
-      ) : (
-        <Button variant="outline" size="sm" className="w-full" disabled>
-          Link indisponível
-        </Button>
+      {/* Expanded segment details */}
+      {expanded && (
+        <div className="ml-12 mb-4 rounded-lg bg-muted/40 border border-border/60 divide-y divide-border/40 text-xs overflow-hidden">
+          {trip.segmentos.map((seg, i) => (
+            <div key={i}>
+              <div className="px-3 py-2.5">
+                <p className="font-semibold text-foreground">
+                  {seg.partida} {seg.origem} → {seg.destino} {seg.chegada}
+                </p>
+                <div className="flex items-center gap-2 text-muted-foreground mt-0.5 flex-wrap">
+                  {seg.numero_voo && <span className="font-mono">{seg.numero_voo}</span>}
+                  {seg.duracao_minutos && <span>| {formatDuration(seg.duracao_minutos)}</span>}
+                  {seg.aeronave && <span>| ✈ {seg.aeronave}</span>}
+                </div>
+              </div>
+              {i < trip.segmentos.length - 1 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/60 text-muted-foreground">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="flex items-center gap-1 whitespace-nowrap">
+                    <Clock className="h-3 w-3" />
+                    {seg.chegada && trip.segmentos[i + 1]?.partida
+                      ? formatDuration(layoverMinutes(seg.chegada, trip.segmentos[i + 1].partida!)) + " escala"
+                      : "escala"}
+                  </span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -273,8 +361,9 @@ function DetailModal({ row, onClose }: { row: ResultRow; onClose: () => void }) 
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
 
-  const dataFmt = new Date(row.data_ida + "T00:00:00").toLocaleDateString("pt-BR", {
-    weekday: "long", day: "2-digit", month: "long", year: "numeric",
+  // "qui., 14 de mai. de 2026"
+  const dataFmtShort = new Date(row.data_ida + "T00:00:00").toLocaleDateString("pt-BR", {
+    weekday: "short", day: "2-digit", month: "short", year: "numeric",
   });
 
   useEffect(() => {
@@ -287,31 +376,44 @@ function DetailModal({ row, onClose }: { row: ResultRow; onClose: () => void }) 
 
   const info = row.cabines[activeCabine];
 
+  // Pick booking link: from trips list first, else fallback info
+  const bookingLink = trips.find((t) => t.link_reserva)?.link_reserva || info?.link_reserva || null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="relative bg-card border border-border shadow-2xl rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
+        className="relative bg-card border border-border shadow-2xl rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="p-5 border-b border-border flex-shrink-0">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground capitalize">{dataFmt}</p>
-              <h2 className="text-xl font-bold text-foreground mt-0.5">
-                {cityName(row.origem)} → {cityName(row.destino)}
-              </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <AirlineLogo programa={row.programa} size="sm" />
-                <span className="text-sm font-medium text-muted-foreground">{nome}</span>
-                <span className="text-muted-foreground">·</span>
-                <span className="text-sm font-mono text-muted-foreground">{row.origem} → {row.destino}</span>
-              </div>
-            </div>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors ml-4 mt-0.5">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
+        {/* Top meta bar */}
+        <div className="flex items-center justify-between px-5 py-2.5 border-b border-border flex-shrink-0">
+          <span className="text-xs text-muted-foreground capitalize">
+            {dataFmtShort} · Visto {formatRelativeTime(row.atualizado_em)}
+          </span>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Route header */}
+        <div className="px-5 pt-3 pb-4 border-b border-border flex-shrink-0">
+          <h2 className="text-2xl font-bold text-foreground leading-tight">
+            {cityName(row.origem)} → {cityName(row.destino)}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-0.5">{row.origem} → {row.destino}</p>
+          {bookingLink ? (
+            <a
+              href={bookingLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-blue-500 font-medium hover:underline mt-1.5"
+            >
+              Reservar via <span className="font-bold">{nome}</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          ) : (
+            <p className="text-sm text-muted-foreground mt-1.5">via {nome}</p>
+          )}
         </div>
 
         {/* Cabin tabs */}
@@ -333,7 +435,7 @@ function DetailModal({ row, onClose }: { row: ResultRow; onClose: () => void }) 
                 {CABINE_LABELS[c as Cabine]}
                 {has && row.cabines[c] && (
                   <span className="block text-[10px] font-normal mt-0.5">
-                    {row.cabines[c]!.milhas.toLocaleString("pt-BR")} pts
+                    {formatMilhas(row.cabines[c]!.milhas)}
                   </span>
                 )}
               </button>
@@ -342,41 +444,45 @@ function DetailModal({ row, onClose }: { row: ResultRow; onClose: () => void }) 
         </div>
 
         {/* Trips list */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto">
           {loadingTrips ? (
             <div className="flex items-center justify-center py-12">
               <span className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
             </div>
           ) : trips.length > 0 ? (
-            trips.map((trip) => (
-              <TripCard key={trip.id} trip={trip} nome={nome} programa={row.programa} />
-            ))
+            <div className="px-4">
+              {trips.map((trip) => (
+                <TripCard key={trip.id} trip={trip} nome={nome} programa={row.programa} />
+              ))}
+            </div>
           ) : info ? (
-            /* Fallback: sem trips individuais, mostra card geral */
-            <div className="border border-border rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xl font-bold text-foreground">{info.milhas.toLocaleString("pt-BR")} pts</p>
-                  {info.taxas_brl != null && (
-                    <p className="text-sm text-muted-foreground">+ {formatBRL(info.taxas_brl)} em taxas</p>
-                  )}
-                  {info.custo_total_brl != null && (
-                    <p className="text-sm font-semibold text-foreground">Total: {formatBRL(info.custo_total_brl)}</p>
-                  )}
+            /* Fallback: sem trips individuais */
+            <div className="p-4">
+              <div className="border border-border rounded-xl p-4 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xl font-bold text-foreground">{formatMilhas(info.milhas)}</p>
+                    {info.taxas_brl != null && (
+                      <p className="text-sm text-muted-foreground mt-0.5">+ {formatBRL(info.taxas_brl)} em taxas</p>
+                    )}
+                    {info.custo_total_brl != null && (
+                      <p className="text-sm font-semibold text-foreground">Total: {formatBRL(info.custo_total_brl)}</p>
+                    )}
+                  </div>
+                  <span className={`px-3 py-1 rounded text-xs font-bold text-white ${info.paradas === 0 ? "bg-green-600" : "bg-blue-500"}`}>
+                    {info.paradas === 0 ? "Direto" : `${info.paradas} parada${info.paradas > 1 ? "s" : ""}`}
+                  </span>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold text-white ${info.paradas === 0 ? "bg-green-600" : "bg-blue-600"}`}>
-                  {info.paradas === 0 ? "Direto" : `${info.paradas} parada${info.paradas > 1 ? "s" : ""}`}
-                </span>
+                {info.link_reserva ? (
+                  <a href={info.link_reserva} target="_blank" rel="noopener noreferrer" className="block">
+                    <Button variant="gold" className="w-full">
+                      <ExternalLink className="h-4 w-4" /> Reservar via {nome}
+                    </Button>
+                  </a>
+                ) : (
+                  <Button variant="outline" className="w-full" disabled>Link indisponível</Button>
+                )}
               </div>
-              {info.link_reserva ? (
-                <a href={info.link_reserva} target="_blank" rel="noopener noreferrer" className="block">
-                  <Button variant="gold" className="w-full">
-                    <ExternalLink className="h-4 w-4" /> Reservar via {nome}
-                  </Button>
-                </a>
-              ) : (
-                <Button variant="outline" className="w-full" disabled>Link indisponível</Button>
-              )}
             </div>
           ) : (
             <p className="text-center text-muted-foreground text-sm py-8">Nenhum voo encontrado para esta cabine.</p>
