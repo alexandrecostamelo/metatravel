@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -7,6 +7,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import type { BuscaResponse, Oferta, Trip } from "@/lib/api";
 import { fetchTrips } from "@/lib/api";
+import { useCotacoes, converterParaBRL } from "@/lib/cotacoes";
+import type { Cotacoes } from "@/lib/cotacoes";
 
 const CABINES_ORDER = ["economica", "premium_economica", "executiva", "primeira"] as const;
 type Cabine = typeof CABINES_ORDER[number];
@@ -178,6 +180,45 @@ function formatBRL(v: number | null): string {
   if (v == null) return "—";
   const n = typeof v === "string" ? parseFloat(v) : v;
   return "R$ " + n.toFixed(2).replace(".", ",");
+}
+
+/** Renderiza a taxa de embarque: se for moeda estrangeira, converte para BRL
+ *  com tooltip mostrando o valor original + "valores aproximados". */
+function renderTaxa(
+  taxasValor: number,
+  taxasMoeda: string,
+  taxasBrl: number | null,
+  cotacoes: Cotacoes | null
+): React.ReactNode {
+  const valor = Number(taxasValor);
+  if (valor <= 0) return null;
+
+  if (taxasMoeda === "BRL") {
+    return <span>+ {formatBRL(taxasBrl)}</span>;
+  }
+
+  const brl = converterParaBRL(valor, taxasMoeda, cotacoes);
+  if (brl != null) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-help inline-flex items-center gap-0.5">
+            + {formatBRL(brl)}
+            <span className="text-[10px] opacity-50 ml-0.5">≈</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p className="text-xs font-medium">
+            {taxasMoeda} {valor.toFixed(2).replace(".", ",")}
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">valores aproximados</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  // Cotações ainda não carregadas — exibe moeda original
+  return <span>+ {taxasMoeda} {valor.toFixed(2).replace(".", ",")}</span>;
 }
 
 function groupOfertas(ofertas: Oferta[]): ResultRow[] {
@@ -505,6 +546,7 @@ const Resultados = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const resultado: BuscaResponse | undefined = location.state?.resultado;
+  const { cotacoes } = useCotacoes();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selectedRow, setSelectedRow] = useState<ResultRow | null>(null);
@@ -690,16 +732,9 @@ const Resultados = () => {
                                       )}
                                       {/* Valor das milhas em BRL + taxa de embarque */}
                                       {info.custo_total_brl != null && (
-                                        <div className="text-xs text-muted-foreground text-center leading-tight">
-                                          <span>{formatBRL(Number(info.custo_total_brl) - Number(info.taxas_brl ?? 0))}</span>
-                                          {Number(info.taxas_valor) > 0 && (
-                                            <span className="text-muted-foreground/70">
-                                              {" + "}
-                                              {info.taxas_moeda === "BRL"
-                                                ? formatBRL(info.taxas_brl)
-                                                : `${info.taxas_moeda} ${Number(info.taxas_valor).toFixed(2).replace(".", ",")}`}
-                                            </span>
-                                          )}
+                                        <div className="text-xs text-muted-foreground text-center leading-tight space-y-0.5">
+                                          <div>{formatBRL(Number(info.custo_total_brl) - Number(info.taxas_brl ?? 0))}</div>
+                                          <div>{renderTaxa(info.taxas_valor, info.taxas_moeda, info.taxas_brl, cotacoes)}</div>
                                         </div>
                                       )}
                                     </div>
