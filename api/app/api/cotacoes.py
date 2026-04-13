@@ -1,11 +1,8 @@
 """
 Cotações de câmbio turismo (BRL).
-- USD e EUR: par *-BRLT (câmbio turismo oficial da AwesomeAPI)
-- GBP e CAD: par *-BRL comercial (BRLT não existe para essas moedas)
-Todos usam o campo `ask` (taxa de venda — o que o turista paga).
+Um único request com os 4 pares comerciais + spread de 4% = aproximação turismo.
 Cache in-process de 15 minutos.
 """
-import asyncio
 import time
 from typing import Optional
 
@@ -15,9 +12,12 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
+AWESOME_URL = "https://economia.awesomeapi.com.br/json/last/USD-BRL,EUR-BRL,GBP-BRL,CAD-BRL"
+TURISMO_SPREAD = 1.04  # ~4% sobre a taxa comercial
+CACHE_TTL = 15 * 60   # 15 minutos
+
 _cache: Optional[dict] = None
 _cache_ts: float = 0
-CACHE_TTL = 15 * 60  # 15 minutos
 
 
 class CotacoesResponse(BaseModel):
@@ -25,14 +25,7 @@ class CotacoesResponse(BaseModel):
     EUR: float
     GBP: float
     CAD: float
-    fonte: str = "awesomeapi"
-
-
-async def _fetch_pairs(client: httpx.AsyncClient, pairs: str) -> dict:
-    url = f"https://economia.awesomeapi.com.br/json/last/{pairs}"
-    resp = await client.get(url)
-    resp.raise_for_status()
-    return resp.json()
+    fonte: str = "awesomeapi / câmbio turismo estimado"
 
 
 @router.get("/api/cotacoes", response_model=CotacoesResponse)
@@ -44,19 +37,20 @@ async def get_cotacoes() -> CotacoesResponse:
 
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
-            # USD e EUR têm par BRLT (turismo); GBP e CAD só têm BRL (comercial)
-            turismo, comercial = await asyncio.gather(
-                _fetch_pairs(client, "USD-BRLT,EUR-BRLT"),
-                _fetch_pairs(client, "GBP-BRL,CAD-BRL"),
-            )
+            resp = await client.get(AWESOME_URL)
+            resp.raise_for_status()
+            data = resp.json()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Erro ao buscar cotações: {exc}")
 
+    def rate(key: str) -> float:
+        return round(float(data.get(key, {}).get("ask", 0)) * TURISMO_SPREAD, 4)
+
     rates = {
-        "USD": float(turismo.get("USDBRLT", {}).get("ask", 0)),
-        "EUR": float(turismo.get("EURBRLT", {}).get("ask", 0)),
-        "GBP": float(comercial.get("GBPBRL", {}).get("ask", 0)),
-        "CAD": float(comercial.get("CADBRL", {}).get("ask", 0)),
+        "USD": rate("USDBRL"),
+        "EUR": rate("EURBRL"),
+        "GBP": rate("GBPBRL"),
+        "CAD": rate("CADBRL"),
     }
 
     _cache = rates
