@@ -4,11 +4,20 @@ import { Plane, Menu, X, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { useCotacoes } from "@/lib/cotacoes";
+
+const CURRENCIES = [
+  { code: "USD", symbol: "US$", label: "Dólar" },
+  { code: "EUR", symbol: "€",   label: "Euro" },
+  { code: "GBP", symbol: "£",   label: "Libra" },
+  { code: "CAD", symbol: "C$",  label: "Dólar Canadense" },
+] as const;
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
+  const { cotacoes, loading: loadingRates } = useCotacoes();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -27,6 +36,33 @@ const Navbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 gradient-navy border-b border-navy-light/30">
+      {/* Rates ticker */}
+      <div className="border-b border-navy-light/20 bg-black/20">
+        <div className="container mx-auto flex items-center h-8 px-4 gap-1">
+          <span className="text-[10px] uppercase tracking-widest text-primary-foreground/40 mr-2 hidden sm:inline">
+            Turismo
+          </span>
+          {CURRENCIES.map(({ code, symbol }) => {
+            const val = cotacoes?.[code as keyof typeof cotacoes];
+            return (
+              <span key={code} className="flex items-center gap-1 text-xs mr-3">
+                <span className="font-semibold text-primary-foreground/80">{symbol}</span>
+                {loadingRates || !val ? (
+                  <span className="inline-block w-10 h-3 rounded bg-white/10 animate-pulse" />
+                ) : (
+                  <span className="text-primary-foreground/60">
+                    R$&nbsp;{(val as number).toFixed(2).replace(".", ",")}
+                  </span>
+                )}
+              </span>
+            );
+          })}
+          <span className="ml-auto text-[10px] text-primary-foreground/30 hidden sm:inline">
+            câmbio turismo
+          </span>
+        </div>
+      </div>
+
       <div className="container mx-auto flex items-center justify-between h-16 px-4">
         <Link to="/" className="flex items-center gap-2">
           <Plane className="h-6 w-6 text-gold" />

@@ -21,7 +21,7 @@ import { toast } from "sonner";
 
 const PROGRAM_IATA: Record<string, string> = {
   aeroplan: "AC", aadvantage: "AA", alaska: "AS", smiles: "G3",
-  azul: "AD", latam_pass: "LA", united: "UA", emirates: "EK",
+  azul: "AD", latam_pass: "LA", united: "UA", delta: "DL", emirates: "EK",
   avios_british: "BA", avios_qatar: "QR", avios_iberia: "IB",
   flying_blue: "AF", singapore: "SQ", turkish: "TK", lufthansa: "LH",
   tap: "TP", finnair_plus: "AY", virgin_atlantic: "VS", etihad: "EY", qantas: "QF",
@@ -36,6 +36,7 @@ const PROGRAMAS_CATALOGO = [
   { slug: "aadvantage",     nome: "AAdvantage",              moeda: "USD" },
   { slug: "alaska",         nome: "Alaska Mileage Plan",     moeda: "USD" },
   { slug: "united",         nome: "United MileagePlus",      moeda: "USD" },
+  { slug: "delta",          nome: "Delta SkyMiles",          moeda: "USD" },
   { slug: "avios_british",  nome: "British Airways Avios",   moeda: "GBP" },
   { slug: "avios_iberia",   nome: "Iberia Avios",            moeda: "EUR" },
   { slug: "avios_qatar",    nome: "Qatar Privilege Club",    moeda: "USD" },
