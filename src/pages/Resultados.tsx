@@ -149,6 +149,8 @@ type CabineInfo = {
   paradas: number;
   link_reserva: string | null;
   taxas_brl: number | null;
+  taxas_valor: number;
+  taxas_moeda: string;
   custo_total_brl: number | null;
 };
 
@@ -191,6 +193,8 @@ function groupOfertas(ofertas: Oferta[]): ResultRow[] {
       paradas: o.paradas,
       link_reserva: o.link_reserva,
       taxas_brl: o.taxas_brl,
+      taxas_valor: o.taxas_valor,
+      taxas_moeda: o.taxas_moeda,
       custo_total_brl: o.custo_total_brl,
     };
     if (o.atualizado_em > row.atualizado_em) row.atualizado_em = o.atualizado_em;
@@ -684,9 +688,20 @@ const Resultados = () => {
                                           {info.milhas.toLocaleString("pt-BR")} pts
                                         </span>
                                       )}
-                                      <span className="text-xs text-muted-foreground">
-                                        {formatBRL(info.custo_total_brl)}
-                                      </span>
+                                      {/* Valor das milhas em BRL + taxa de embarque */}
+                                      {info.custo_total_brl != null && (
+                                        <div className="text-xs text-muted-foreground text-center leading-tight">
+                                          <span>{formatBRL(info.custo_total_brl - (info.taxas_brl ?? 0))}</span>
+                                          {info.taxas_valor > 0 && (
+                                            <span className="text-muted-foreground/70">
+                                              {" + "}
+                                              {info.taxas_moeda === "BRL"
+                                                ? formatBRL(info.taxas_brl)
+                                                : `${info.taxas_moeda} ${info.taxas_valor.toFixed(2).replace(".", ",")}`}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   ) : (
                                     <span className="inline-block px-2 py-1 rounded text-xs font-semibold bg-muted text-muted-foreground">
