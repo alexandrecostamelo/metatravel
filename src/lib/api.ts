@@ -66,6 +66,77 @@ export async function fetchProgramas(): Promise<Programa[]> {
   return res.json();
 }
 
+// ── Admin ────────────────────────────────────────────────────────────────────
+
+export interface ProgramaAdmin {
+  id: number;
+  slug: string;
+  nome: string;
+  moeda_taxas_default: string;
+  ativo: boolean;
+  cotacao_atual_brl: number | null;
+  cotacao_vigente_desde: string | null;
+}
+
+export interface CotacaoHistorico {
+  id: number;
+  programa_id: number;
+  valor_brl: number;
+  vigente_desde: string;
+  fonte: string;
+}
+
+async function adminFetch(path: string, init?: RequestInit): Promise<Response> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers || {}),
+    },
+  });
+}
+
+export async function adminListarProgramas(): Promise<ProgramaAdmin[]> {
+  const res = await adminFetch("/admin/programas");
+  if (!res.ok) throw new Error("Erro ao carregar programas");
+  return res.json();
+}
+
+export async function adminCriarPrograma(body: { slug: string; nome: string; moeda_taxas_default?: string }): Promise<ProgramaAdmin> {
+  const res = await adminFetch("/admin/programas", { method: "POST", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function adminAtualizarPrograma(id: number, body: { nome?: string; ativo?: boolean }): Promise<ProgramaAdmin> {
+  const res = await adminFetch(`/admin/programas/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function adminDeletarPrograma(id: number): Promise<void> {
+  const res = await adminFetch(`/admin/programas/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function adminRegistrarCotacao(programaId: number, valorBrl: number): Promise<CotacaoHistorico> {
+  const res = await adminFetch(`/admin/programas/${programaId}/cotacao`, {
+    method: "POST",
+    body: JSON.stringify({ valor_brl: valorBrl }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function adminHistoricoCotacoes(programaId: number): Promise<CotacaoHistorico[]> {
+  const res = await adminFetch(`/admin/programas/${programaId}/cotacoes`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function buscarPassagens(body: BuscaRequest): Promise<BuscaResponse> {
   const authHeaders = await getAuthHeaders();
   const controller = new AbortController();

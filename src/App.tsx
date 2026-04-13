@@ -9,6 +9,7 @@ import Resultados from "./pages/Resultados";
 import Login from "./pages/Login";
 import Cadastro from "./pages/Cadastro";
 import Historico from "./pages/Historico";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/cadastro" element={<Cadastro />} />
           <Route path="/historico" element={<Historico />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
