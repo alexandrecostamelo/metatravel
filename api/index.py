@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from app.api import admin, airports, busca, buscas, cron, health, info, programas
+from app.api import admin, airports, busca, buscas, cron, health, info, programas, trips
 from app.config import settings
 from app.middleware.rate_limit import RateLimitMiddleware
 
@@ -42,6 +42,7 @@ app.include_router(programas.router)
 app.include_router(buscas.router)
 app.include_router(cron.router)
 app.include_router(admin.router)
+app.include_router(trips.router)
 
 
 @app.middleware("http")

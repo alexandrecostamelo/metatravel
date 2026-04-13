@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, SearchX, Info, X, ExternalLink } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ArrowLeft, SearchX, Info, X, ExternalLink, Clock, PlaneTakeoff } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import type { BuscaResponse, Oferta } from "@/lib/api";
+import type { BuscaResponse, Oferta, Trip } from "@/lib/api";
+import { fetchTrips } from "@/lib/api";
 
 const CABINES_ORDER = ["economica", "premium_economica", "executiva", "primeira"] as const;
 type Cabine = typeof CABINES_ORDER[number];
@@ -62,21 +64,68 @@ const PROGRAM_IATA: Record<string, string> = {
   qantas: "QF",
 };
 
-const AIRPORT_CITIES: Record<string, string> = {
-  GRU: "São Paulo", CGH: "São Paulo", VCP: "Campinas",
-  GIG: "Rio de Janeiro", SDU: "Rio de Janeiro",
-  BSB: "Brasília", SSA: "Salvador", REC: "Recife",
-  FOR: "Fortaleza", BEL: "Belém", MAO: "Manaus",
-  CWB: "Curitiba", POA: "Porto Alegre", FLN: "Florianópolis",
-  MIA: "Miami", JFK: "Nova York", LAX: "Los Angeles",
-  LHR: "Londres", CDG: "Paris", AMS: "Amsterdam",
-  FRA: "Frankfurt", MAD: "Madri", LIS: "Lisboa",
-  DXB: "Dubai", DOH: "Doha", SIN: "Singapura",
-  NRT: "Tóquio", PEK: "Pequim", SYD: "Sydney",
+const AIRPORTS: Record<string, { name: string; city: string }> = {
+  // Brasil
+  GRU: { name: "Aeroporto Internacional de Guarulhos", city: "São Paulo" },
+  CGH: { name: "Aeroporto de Congonhas", city: "São Paulo" },
+  VCP: { name: "Aeroporto Internacional de Viracopos", city: "Campinas" },
+  GIG: { name: "Aeroporto Internacional Tom Jobim (Galeão)", city: "Rio de Janeiro" },
+  SDU: { name: "Aeroporto Santos Dumont", city: "Rio de Janeiro" },
+  BSB: { name: "Aeroporto Internacional de Brasília", city: "Brasília" },
+  SSA: { name: "Aeroporto Internacional de Salvador", city: "Salvador" },
+  REC: { name: "Aeroporto Internacional do Recife", city: "Recife" },
+  FOR: { name: "Aeroporto Internacional de Fortaleza", city: "Fortaleza" },
+  BEL: { name: "Aeroporto Internacional de Belém", city: "Belém" },
+  MAO: { name: "Aeroporto Internacional de Manaus", city: "Manaus" },
+  CWB: { name: "Aeroporto Internacional de Curitiba", city: "Curitiba" },
+  POA: { name: "Aeroporto Internacional Salgado Filho", city: "Porto Alegre" },
+  FLN: { name: "Aeroporto Internacional de Florianópolis", city: "Florianópolis" },
+  NAT: { name: "Aeroporto Internacional de Natal", city: "Natal" },
+  MCZ: { name: "Aeroporto Internacional de Maceió", city: "Maceió" },
+  JPA: { name: "Aeroporto Internacional de João Pessoa", city: "João Pessoa" },
+  THE: { name: "Aeroporto Internacional de Teresina", city: "Teresina" },
+  SLZ: { name: "Aeroporto Internacional de São Luís", city: "São Luís" },
+  CGB: { name: "Aeroporto Internacional de Cuiabá", city: "Cuiabá" },
+  CGR: { name: "Aeroporto Internacional de Campo Grande", city: "Campo Grande" },
+  // América do Norte
+  MIA: { name: "Aeroporto Internacional de Miami", city: "Miami" },
+  JFK: { name: "Aeroporto Internacional John F. Kennedy", city: "Nova York" },
+  EWR: { name: "Aeroporto Internacional Newark Liberty", city: "Nova York" },
+  LAX: { name: "Aeroporto Internacional de Los Angeles", city: "Los Angeles" },
+  ORD: { name: "Aeroporto Internacional O'Hare", city: "Chicago" },
+  ATL: { name: "Aeroporto Internacional Hartsfield-Jackson", city: "Atlanta" },
+  DFW: { name: "Aeroporto Internacional Dallas/Fort Worth", city: "Dallas" },
+  IAH: { name: "Aeroporto Internacional George Bush", city: "Houston" },
+  YYZ: { name: "Aeroporto Internacional Pearson", city: "Toronto" },
+  // Europa
+  LHR: { name: "Aeroporto de Heathrow", city: "Londres" },
+  CDG: { name: "Aeroporto Charles de Gaulle", city: "Paris" },
+  AMS: { name: "Aeroporto de Schiphol", city: "Amsterdam" },
+  FRA: { name: "Aeroporto Internacional de Frankfurt", city: "Frankfurt" },
+  MAD: { name: "Aeroporto Adolfo Suárez Madrid-Barajas", city: "Madri" },
+  LIS: { name: "Aeroporto Humberto Delgado", city: "Lisboa" },
+  FCO: { name: "Aeroporto Internacional Leonardo da Vinci", city: "Roma" },
+  BCN: { name: "Aeroporto de Barcelona-El Prat", city: "Barcelona" },
+  MUC: { name: "Aeroporto Internacional de Munique", city: "Munique" },
+  ZRH: { name: "Aeroporto de Zurique", city: "Zurique" },
+  // Oriente Médio / Ásia / Oceania
+  DXB: { name: "Aeroporto Internacional de Dubai", city: "Dubai" },
+  DOH: { name: "Aeroporto Internacional Hamad", city: "Doha" },
+  AUH: { name: "Aeroporto Internacional de Abu Dhabi", city: "Abu Dhabi" },
+  SIN: { name: "Aeroporto Internacional de Changi", city: "Singapura" },
+  NRT: { name: "Aeroporto Internacional de Narita", city: "Tóquio" },
+  HND: { name: "Aeroporto Internacional de Haneda", city: "Tóquio" },
+  PEK: { name: "Aeroporto Internacional Capital de Pequim", city: "Pequim" },
+  SYD: { name: "Aeroporto Internacional de Kingsford Smith", city: "Sydney" },
+  ICN: { name: "Aeroporto Internacional de Incheon", city: "Seul" },
 };
 
+function airportLabel(iata: string): { name: string; city: string } {
+  return AIRPORTS[iata] || { name: iata, city: "" };
+}
+
 function cityName(iata: string): string {
-  return AIRPORT_CITIES[iata] || iata;
+  return AIRPORTS[iata]?.city || iata;
 }
 
 function AirlineLogo({ programa, size = "sm" }: { programa: string; size?: "sm" | "lg" }) {
@@ -147,53 +196,126 @@ function groupOfertas(ofertas: Oferta[]): ResultRow[] {
   return Array.from(map.values());
 }
 
+function formatDuration(mins: number | null): string {
+  if (!mins) return "";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h${m > 0 ? ` ${m}min` : ""}` : `${m}min`;
+}
+
+function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa: string }) {
+  const seg = trip.segmentos[0];
+  return (
+    <div className="border border-border rounded-xl p-4 space-y-3 hover:border-primary/50 transition-colors">
+      {/* Rota + horários */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-center min-w-[48px]">
+          <p className="text-lg font-bold text-foreground">{seg?.partida || "—"}</p>
+          <p className="text-xs text-muted-foreground font-mono">{trip.origem}</p>
+        </div>
+        <div className="flex-1 flex flex-col items-center gap-0.5">
+          <div className="flex items-center gap-1 w-full">
+            <div className="h-px flex-1 bg-border" />
+            <PlaneTakeoff className="h-3.5 w-3.5 text-muted-foreground" />
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full text-white ${trip.paradas === 0 ? "bg-green-600" : "bg-blue-600"}`}>
+            {trip.paradas === 0 ? "Direto" : `${trip.paradas} parada${trip.paradas > 1 ? "s" : ""}`}
+          </span>
+          {trip.duracao_minutos && (
+            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+              <Clock className="h-3 w-3" />{formatDuration(trip.duracao_minutos)}
+            </span>
+          )}
+        </div>
+        <div className="text-center min-w-[48px]">
+          <p className="text-lg font-bold text-foreground">{seg?.chegada || "—"}</p>
+          <p className="text-xs text-muted-foreground font-mono">{trip.destino}</p>
+        </div>
+        <div className="text-right ml-2">
+          <p className="text-base font-bold text-foreground">{trip.milhas.toLocaleString("pt-BR")} pts</p>
+          {trip.taxas_valor > 0 && (
+            <p className="text-xs text-muted-foreground">
+              + {trip.taxas_moeda === "BRL"
+                ? `R$ ${trip.taxas_valor.toFixed(2).replace(".", ",")}`
+                : `${trip.taxas_moeda} ${trip.taxas_valor.toFixed(2)}`}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Número de voo */}
+      {seg?.numero_voo && (
+        <p className="text-xs text-muted-foreground font-mono">Voo {seg.numero_voo}</p>
+      )}
+
+      {/* Botão reservar */}
+      {trip.link_reserva ? (
+        <a href={trip.link_reserva} target="_blank" rel="noopener noreferrer" className="block">
+          <Button variant="gold" size="sm" className="w-full">
+            <ExternalLink className="h-3.5 w-3.5" />
+            Reservar via {nome}
+          </Button>
+        </a>
+      ) : (
+        <Button variant="outline" size="sm" className="w-full" disabled>
+          Link indisponível
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function DetailModal({ row, onClose }: { row: ResultRow; onClose: () => void }) {
   const nome = PROGRAM_NAMES[row.programa] || row.programa;
   const availableCabines = CABINES_ORDER.filter((c) => row.cabines[c]);
   const [activeCabine, setActiveCabine] = useState<string>(availableCabines[0] || "economica");
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [loadingTrips, setLoadingTrips] = useState(false);
+
+  const dataFmt = new Date(row.data_ida + "T00:00:00").toLocaleDateString("pt-BR", {
+    weekday: "long", day: "2-digit", month: "long", year: "numeric",
+  });
+
+  useEffect(() => {
+    setLoadingTrips(true);
+    setTrips([]);
+    fetchTrips(row.origem, row.destino, row.data_ida, activeCabine, row.programa)
+      .then(setTrips)
+      .finally(() => setLoadingTrips(false));
+  }, [row.origem, row.destino, row.data_ida, activeCabine, row.programa]);
+
   const info = row.cabines[activeCabine];
-  const dataFmt = new Date(row.data_ida + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
-        className="relative bg-card border-l border-border shadow-2xl h-full w-full max-w-md overflow-y-auto"
+        className="relative bg-card border border-border shadow-2xl rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 border-b border-border">
-          <div className="flex items-start justify-between mb-1">
+        <div className="p-5 border-b border-border flex-shrink-0">
+          <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs text-muted-foreground capitalize">
-                {dataFmt} · Visto {formatRelativeTime(row.atualizado_em)}
-              </p>
-              <h2 className="text-lg font-bold text-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground capitalize">{dataFmt}</p>
+              <h2 className="text-xl font-bold text-foreground mt-0.5">
                 {cityName(row.origem)} → {cityName(row.destino)}
               </h2>
-              <p className="text-sm text-muted-foreground">{row.origem} → {row.destino}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <AirlineLogo programa={row.programa} size="sm" />
+                <span className="text-sm font-medium text-muted-foreground">{nome}</span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-sm font-mono text-muted-foreground">{row.origem} → {row.destino}</span>
+              </div>
             </div>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors mt-1">
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors ml-4 mt-0.5">
               <X className="h-5 w-5" />
             </button>
           </div>
-
-          {/* Book link */}
-          {info?.link_reserva && (
-            <a
-              href={info.link_reserva}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-500 hover:underline mt-2"
-            >
-              <AirlineLogo programa={row.programa} size="sm" />
-              Reservar via {nome}
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          )}
         </div>
 
         {/* Cabin tabs */}
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border flex-shrink-0">
           {CABINES_ORDER.map((c) => {
             const has = !!row.cabines[c];
             return (
@@ -205,100 +327,59 @@ function DetailModal({ row, onClose }: { row: ResultRow; onClose: () => void }) 
                     ? "border-primary text-foreground"
                     : has
                     ? "border-transparent text-muted-foreground hover:text-foreground"
-                    : "border-transparent text-muted-foreground/40 cursor-not-allowed"
+                    : "border-transparent text-muted-foreground/30 cursor-not-allowed"
                 }`}
               >
                 {CABINE_LABELS[c as Cabine]}
+                {has && row.cabines[c] && (
+                  <span className="block text-[10px] font-normal mt-0.5">
+                    {row.cabines[c]!.milhas.toLocaleString("pt-BR")} pts
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
 
-        {/* Cabin detail */}
-        <div className="p-4">
-          {info ? (
-            <div className="space-y-4">
-              {/* Main info card */}
-              <div className="bg-muted/40 rounded-xl p-4 flex items-center justify-between">
+        {/* Trips list */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {loadingTrips ? (
+            <div className="flex items-center justify-center py-12">
+              <span className="h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            </div>
+          ) : trips.length > 0 ? (
+            trips.map((trip) => (
+              <TripCard key={trip.id} trip={trip} nome={nome} programa={row.programa} />
+            ))
+          ) : info ? (
+            /* Fallback: sem trips individuais, mostra card geral */
+            <div className="border border-border rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-bold text-foreground">
-                    {info.milhas.toLocaleString("pt-BR")} pts
-                  </p>
+                  <p className="text-xl font-bold text-foreground">{info.milhas.toLocaleString("pt-BR")} pts</p>
                   {info.taxas_brl != null && (
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      + {formatBRL(info.taxas_brl)} em taxas
-                    </p>
+                    <p className="text-sm text-muted-foreground">+ {formatBRL(info.taxas_brl)} em taxas</p>
                   )}
                   {info.custo_total_brl != null && (
-                    <p className="text-sm font-semibold text-foreground mt-1">
-                      Total: {formatBRL(info.custo_total_brl)}
-                    </p>
+                    <p className="text-sm font-semibold text-foreground">Total: {formatBRL(info.custo_total_brl)}</p>
                   )}
                 </div>
-                <span className={`px-3 py-1.5 rounded-full text-xs font-bold text-white ${info.paradas === 0 ? "bg-green-600" : "bg-blue-600"}`}>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold text-white ${info.paradas === 0 ? "bg-green-600" : "bg-blue-600"}`}>
                   {info.paradas === 0 ? "Direto" : `${info.paradas} parada${info.paradas > 1 ? "s" : ""}`}
                 </span>
               </div>
-
-              {/* Route visual */}
-              <div className="flex items-center gap-3 px-1">
-                <div className="text-center">
-                  <p className="text-lg font-bold text-foreground">{row.origem}</p>
-                  <p className="text-xs text-muted-foreground">{cityName(row.origem)}</p>
-                </div>
-                <div className="flex-1 flex items-center gap-1">
-                  <div className="h-px flex-1 bg-border"></div>
-                  <AirlineLogo programa={row.programa} size="sm" />
-                  <div className="h-px flex-1 bg-border"></div>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-foreground">{row.destino}</p>
-                  <p className="text-xs text-muted-foreground">{cityName(row.destino)}</p>
-                </div>
-              </div>
-
-              {/* Booking button */}
               {info.link_reserva ? (
                 <a href={info.link_reserva} target="_blank" rel="noopener noreferrer" className="block">
                   <Button variant="gold" className="w-full">
-                    <ExternalLink className="h-4 w-4" />
-                    Ver opções de reserva — {nome}
+                    <ExternalLink className="h-4 w-4" /> Reservar via {nome}
                   </Button>
                 </a>
               ) : (
-                <Button variant="outline" className="w-full" disabled>
-                  Link de reserva indisponível
-                </Button>
+                <Button variant="outline" className="w-full" disabled>Link indisponível</Button>
               )}
-
-              {/* All cabins summary */}
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Outras cabines</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {CABINES_ORDER.filter((c) => c !== activeCabine).map((c) => {
-                    const ci = row.cabines[c];
-                    return (
-                      <button
-                        key={c}
-                        onClick={() => ci && setActiveCabine(c)}
-                        className={`rounded-lg border p-3 text-left transition-colors ${ci ? "border-border hover:border-primary cursor-pointer" : "border-border/50 opacity-40 cursor-not-allowed"}`}
-                      >
-                        <p className="text-xs text-muted-foreground">{CABINE_LABELS[c as Cabine]}</p>
-                        {ci ? (
-                          <p className="text-sm font-bold text-foreground mt-0.5">
-                            {ci.milhas.toLocaleString("pt-BR")} pts
-                          </p>
-                        ) : (
-                          <p className="text-sm text-muted-foreground mt-0.5">Indisponível</p>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
           ) : (
-            <p className="text-muted-foreground text-sm">Selecione uma cabine disponível.</p>
+            <p className="text-center text-muted-foreground text-sm py-8">Nenhum voo encontrado para esta cabine.</p>
           )}
         </div>
       </div>
@@ -428,7 +509,20 @@ const Resultados = () => {
                             className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                           >
                             <td className="px-4 py-3 text-foreground whitespace-nowrap">
-                              {new Date(row.data_ida + "T00:00:00").toLocaleDateString("pt-BR")}
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-default">
+                                    {new Date(row.data_ida + "T00:00:00").toLocaleDateString("pt-BR")}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  <p className="font-semibold capitalize">
+                                    {new Date(row.data_ida + "T00:00:00").toLocaleDateString("pt-BR", {
+                                      weekday: "long", day: "2-digit", month: "long", year: "numeric",
+                                    })}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
                             </td>
                             <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
                               {formatRelativeTime(row.atualizado_em)}
@@ -439,8 +533,32 @@ const Resultados = () => {
                                 {nome}
                               </span>
                             </td>
-                            <td className="px-4 py-3 font-mono font-semibold text-blue-500">{row.origem}</td>
-                            <td className="px-4 py-3 font-mono font-semibold text-blue-500">{row.destino}</td>
+                            <td className="px-4 py-3">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="font-mono font-semibold text-blue-500 cursor-default">{row.origem}</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  <p className="font-semibold">{airportLabel(row.origem).name}</p>
+                                  {airportLabel(row.origem).city && (
+                                    <p className="text-xs opacity-80">{airportLabel(row.origem).city}</p>
+                                  )}
+                                </TooltipContent>
+                              </Tooltip>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="font-mono font-semibold text-blue-500 cursor-default">{row.destino}</span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  <p className="font-semibold">{airportLabel(row.destino).name}</p>
+                                  {airportLabel(row.destino).city && (
+                                    <p className="text-xs opacity-80">{airportLabel(row.destino).city}</p>
+                                  )}
+                                </TooltipContent>
+                              </Tooltip>
+                            </td>
                             {CABINES_ORDER.map((cabine) => {
                               const info = row.cabines[cabine];
                               return (

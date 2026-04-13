@@ -99,6 +99,46 @@ async function adminFetch(path: string, init?: RequestInit): Promise<Response> {
   });
 }
 
+// ── Trips ─────────────────────────────────────────────────────────────────────
+
+export interface Segmento {
+  origem: string;
+  destino: string;
+  partida: string | null;
+  chegada: string | null;
+  numero_voo: string | null;
+  duracao_minutos: number | null;
+  escala: boolean;
+}
+
+export interface Trip {
+  id: string;
+  origem: string;
+  destino: string;
+  data: string;
+  cabine: string;
+  milhas: number;
+  taxas_valor: number;
+  taxas_moeda: string;
+  paradas: number;
+  duracao_minutos: number | null;
+  segmentos: Segmento[];
+  link_reserva: string | null;
+}
+
+export async function fetchTrips(
+  origem: string,
+  destino: string,
+  data: string,
+  cabine: string,
+  programa: string,
+): Promise<Trip[]> {
+  const params = new URLSearchParams({ origem, destino, data, cabine, programa });
+  const res = await fetch(`${API_BASE}/trips?${params}`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export async function adminListarProgramas(): Promise<ProgramaAdmin[]> {
   const res = await adminFetch("/admin/programas");
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => "")}`);
