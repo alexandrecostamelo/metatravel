@@ -11,6 +11,7 @@ Docs: https://developers.seats.aero/reference/cached-search
 """
 from datetime import date
 from decimal import Decimal
+from typing import Optional
 
 import httpx
 import structlog
@@ -30,6 +31,39 @@ CABINE_MAP = {
     Cabine.EXECUTIVA: "business",
     Cabine.PRIMEIRA: "first",
 }
+
+# Mapeamento de Source (seats.aero) → URL de busca do programa
+# {o} = origem IATA, {d} = destino IATA, {dt} = data YYYY-MM-DD
+_LINK_TEMPLATES: dict[str, str] = {
+    "AC": "https://www.aircanada.com/aeroplan/redeem/availability/outbound?org0={o}&dest0={d}&departureDate0={dt}&ADT=1&YTH=0&CHD=0&INF=0&INS=0&marketCode=INT",
+    "AS": "https://www.alaskaair.com/search/results?o0={o}&d0={d}&dt0={dt}&px=1&tt=1&pt=MilesOnly",
+    "AA": "https://www.aa.com/booking/find-flights",
+    "DL": "https://www.delta.com/us/en/flight-search/search?tripType=ONE_WAY&passengers.adultCount=1&departureCity={o}&arrivalCity={d}&departureDate={dt}&fareType=MILES",
+    "UA": "https://www.united.com/ual/en/us/flight-search/book-a-flight/results/rev?f={o}&t={d}&d={dt}&tt=1&sc=7&px=1&taxer=1",
+    "BA": "https://www.britishairways.com/travel/redeem/execclub/_gf/en_gb?eId=106013&od={o}{d}&dd={dt}&ar=1",
+    "QR": "https://www.qatarairways.com/en/privilege-club/redeem-avios.html",
+    "EK": "https://www.emirates.com/english/book/",
+    "SQ": "https://www.singaporeair.com/en_UK/us/plan-travel/book-a-flight/",
+    "VS": "https://www.virginatlantic.com/flights/search",
+    "ANA": "https://www.ana.co.jp/en/us/flyandbuy/",
+    "NH": "https://www.ana.co.jp/en/us/flyandbuy/",
+    "LH": "https://www.miles-and-more.com/row/en/earn/flight-award.html",
+    "AF": "https://www.flyingblue.com/en/spend/flights/search",
+    "KL": "https://www.flyingblue.com/en/spend/flights/search",
+    "TK": "https://www.turkishairlines.com/en-us/miles-and-smiles/use-miles/",
+    "EY": "https://www.etihad.com/en-us/etihad-guest/redeem/",
+    "smiles": "https://www.smiles.com.br/compra/passagem/resultado?originAirportCode={o}&destinationAirportCode={d}&departureDate={dt}&adults=1&tripType=2",
+    "azul": "https://www.voeazul.com.br/tudo-azul/compra-com-pontos",
+    "latam_pass": "https://www.latamairlines.com/br/pt/latam-pass/usar-pontos",
+}
+
+
+def _build_link(source: str, origem: str, destino: str, data_ida: date) -> Optional[str]:
+    """Retorna URL de reserva para o programa, com deep link quando disponível."""
+    template = _LINK_TEMPLATES.get(source.upper()) or _LINK_TEMPLATES.get(source.lower())
+    if not template:
+        return None
+    return template.format(o=origem, d=destino, dt=data_ida.isoformat())
 
 
 class SeatsAeroAdapter(BaseAdapter):
@@ -93,6 +127,12 @@ class SeatsAeroAdapter(BaseAdapter):
                         milhas=int(item.get("YMileageCost", 0) or 0),
                         taxas_moeda=item.get("TaxesCurrency", "USD"),
                         taxas_valor=Decimal(str(item.get("YTotalTaxes", 0) or 0)) / 100,
+                        link_reserva=_build_link(
+                            item.get("Route", {}).get("Source", ""),
+                            item.get("Route", {}).get("OriginAirport", req.origem),
+                            item.get("Route", {}).get("DestinationAirport", req.destino),
+                            date.fromisoformat(item["Date"]),
+                        ),
                         fonte=self.nome,
                     )
                 )
