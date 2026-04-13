@@ -51,6 +51,12 @@ class Segmento(BaseModel):
     aeronave: Optional[str] = None
 
 
+class BookingLink(BaseModel):
+    label: str
+    link: str
+    primary: bool = False
+
+
 class Trip(BaseModel):
     id: str
     origem: str
@@ -66,9 +72,11 @@ class Trip(BaseModel):
     link_reserva: Optional[str] = None
     assentos: Optional[int] = None
     airlines: list[str] = []
+    carriers: dict[str, str] = {}   # {"AD": "Azul Airlines", ...}
     source: Optional[str] = None
     distancia_milhas: Optional[int] = None
     direto: bool = False
+    booking_links: list[BookingLink] = []
 
 
 def _build_link(source: str, origem: str, destino: str, data: str) -> Optional[str]:
@@ -127,7 +135,12 @@ def _iso_to_hhmm(iso: Optional[str]) -> Optional[str]:
     return None
 
 
-def _parse_trip_detail(flight: dict, avail: dict, cabine: str, idx: int) -> Trip:
+def _parse_trip_detail(
+    flight: dict, avail: dict, cabine: str, idx: int,
+    booking_links: list["BookingLink"] = [],
+    carriers: dict = {},
+    primary_link: Optional[str] = None,
+) -> Trip:
     """Converte um voo individual do endpoint /trips/{id} em Trip."""
     segs: list[Segmento] = []
     raw_segs = flight.get("AvailabilitySegments") or flight.get("Segments") or flight.get("segments") or []
@@ -189,7 +202,9 @@ def _parse_trip_detail(flight: dict, avail: dict, cabine: str, idx: int) -> Trip
         assentos=avail["assentos"],
         airlines=airlines,
         distancia_milhas=int(dist) if dist else None,
-        link_reserva=flight.get("URL") or avail["link_reserva"],
+        link_reserva=primary_link or flight.get("URL") or avail["link_reserva"],
+        booking_links=booking_links,
+        carriers=carriers,
         source=avail["source"],
     )
 
@@ -252,14 +267,26 @@ async def get_trips(
                     )
                     if r.status_code == 200:
                         flights = r.json()
-                        # Resposta: {"data": [...], "booking_links": ..., "carriers": ...}
+                        # Resposta: {"data": [...], "booking_links": [...], "carriers": {...}}
                         inner: list = []
+                        raw_booking_links: list = []
+                        raw_carriers: dict = {}
                         if isinstance(flights, dict):
                             inner = flights.get("data") or []
+                            raw_booking_links = flights.get("booking_links") or []
+                            raw_carriers = flights.get("carriers") or {}
                         elif isinstance(flights, list):
                             inner = flights
+                        booking_links = [
+                            BookingLink(label=bl.get("label", ""), link=bl.get("link", ""), primary=bl.get("primary", False))
+                            for bl in raw_booking_links if bl.get("link")
+                        ]
+                        primary_link = next((bl.link for bl in booking_links if bl.primary), None)
                         if inner:
-                            return [_parse_trip_detail(f, avail, cabine, i) for i, f in enumerate(inner)]
+                            return [
+                                _parse_trip_detail(f, avail, cabine, i, booking_links, raw_carriers, primary_link)
+                                for i, f in enumerate(inner)
+                            ]
                 except Exception as exc:
                     print(f"[trips] /trips/{avail_item['ID']} erro: {exc}")
                 # Fallback: retorna um Trip com os dados de disponibilidade
@@ -271,6 +298,7 @@ async def get_trips(
                     assentos=avail["assentos"], airlines=avail["airlines"],
                     distancia_milhas=avail["distancia_milhas"],
                     link_reserva=avail["link_reserva"], source=avail["source"],
+                    booking_links=[], carriers={},
                 )]
 
             results = await asyncio.gather(*[fetch_trips_detail(it) for it in available])

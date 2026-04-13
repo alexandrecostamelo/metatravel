@@ -128,9 +128,11 @@ export interface Trip {
   link_reserva: string | null;
   assentos?: number | null;
   airlines?: string[];
+  carriers?: Record<string, string>;
   source?: string | null;
   distancia_milhas?: number | null;
   direto?: boolean;
+  booking_links?: { label: string; link: string; primary: boolean }[];
 }
 
 export async function fetchTrips(

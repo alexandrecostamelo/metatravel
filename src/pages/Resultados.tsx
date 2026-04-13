@@ -495,16 +495,38 @@ function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa
             </div>
           )}
 
-          {trip.link_reserva && (
+          {/* Opções de reserva */}
+          {trip.booking_links && trip.booking_links.length > 0 ? (
+            <div className="border-t border-border/60">
+              <div className="px-4 py-2 bg-muted/40 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                Opções de reserva
+              </div>
+              {trip.booking_links.map((bl, i) => (
+                <a
+                  key={i}
+                  href={bl.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center justify-between px-4 py-2.5 hover:bg-muted/40 transition-colors border-t border-border/40 first:border-0 ${bl.primary ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}`}
+                >
+                  <span className={`text-xs font-medium ${bl.primary ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
+                    {bl.label.replace("Book via ", "")}
+                    {bl.primary && <span className="ml-1.5 text-[10px] text-blue-500 font-normal">· principal</span>}
+                  </span>
+                  <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                </a>
+              ))}
+            </div>
+          ) : trip.link_reserva ? (
             <div className="px-4 py-2.5 border-t border-border/60 bg-muted/40">
               <a href={trip.link_reserva} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-500 hover:text-blue-600 hover:underline"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                Reservar diretamente via {nome}
+                Reservar via {nome}
               </a>
             </div>
-          )}
+          ) : null}
         </div>
       )}
     </div>
