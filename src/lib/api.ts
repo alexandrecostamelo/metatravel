@@ -108,6 +108,7 @@ export interface Segmento {
   chegada: string | null;
   numero_voo: string | null;
   duracao_minutos: number | null;
+  layover_minutos?: number | null;
   escala: boolean;
   aeronave?: string | null;
 }
@@ -126,6 +127,8 @@ export interface Trip {
   segmentos: Segmento[];
   link_reserva: string | null;
   assentos?: number | null;
+  airlines?: string[];
+  source?: string | null;
 }
 
 export async function fetchTrips(

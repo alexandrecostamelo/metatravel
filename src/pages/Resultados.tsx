@@ -285,6 +285,26 @@ function layoverMinutes(arrTime: string, depTime: string): number {
   return diff;
 }
 
+/** Extrai o IATA de 2 letras do número do voo (ex: "AC101" → "AC", "G31654" → "G3") */
+function flightIata(num: string | null): string | null {
+  if (!num) return null;
+  const m = num.match(/^([A-Z0-9]{2})\d/);
+  return m ? m[1] : null;
+}
+
+/** Logo de cia aérea a partir do código IATA do voo (não do programa) */
+function SegmentLogo({ iata }: { iata: string | null }) {
+  if (!iata) return <span className="text-base">✈</span>;
+  return (
+    <img
+      src={`https://www.gstatic.com/flights/airline_logos/70px/${iata}.png`}
+      alt={iata}
+      className="w-6 h-6 object-contain"
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+    />
+  );
+}
+
 function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa: string }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -301,22 +321,32 @@ function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa
   if (allAirports[allAirports.length - 1] !== trip.destino) allAirports.push(trip.destino);
 
   const nextDay = depTime !== "—" && arrTime !== "—" && arrTime < depTime;
-
   const flightNums = trip.segmentos.map((s) => s.numero_voo).filter(Boolean).join(", ");
 
-  const taxasStr =
-    trip.taxas_valor > 0
-      ? trip.taxas_moeda === "BRL"
-        ? `R$ ${trip.taxas_valor.toFixed(2).replace(".", ",")}`
-        : `$${trip.taxas_valor.toFixed(2)} ${trip.taxas_moeda}`
-      : null;
+  // Operating airlines: prefer trip.airlines, fallback to flight number prefixes
+  const operatingIatas: string[] = trip.airlines?.length
+    ? trip.airlines
+    : [...new Set(trip.segmentos.map((s) => flightIata(s.numero_voo)).filter(Boolean) as string[])];
+
+  const taxasStr = Number(trip.taxas_valor) > 0
+    ? trip.taxas_moeda === "BRL"
+      ? `R$ ${Number(trip.taxas_valor).toFixed(2).replace(".", ",")}`
+      : `${trip.taxas_moeda} ${Number(trip.taxas_valor).toFixed(2)}`
+    : null;
 
   return (
     <div className="border-b border-border last:border-0">
+      {/* ── Summary row ── */}
       <div className="flex items-start gap-3 py-4">
-        {/* Airline logo */}
-        <div className="flex-shrink-0 w-9 flex justify-center pt-0.5">
-          <AirlineLogo programa={programa} size="sm" />
+
+        {/* Operating airline logos */}
+        <div className="flex-shrink-0 flex flex-col gap-1 items-center w-9 pt-0.5">
+          {operatingIatas.length > 0
+            ? operatingIatas.slice(0, 2).map((iata) => (
+                <SegmentLogo key={iata} iata={iata} />
+              ))
+            : <AirlineLogo programa={programa} size="sm" />
+          }
         </div>
 
         {/* Flight info */}
@@ -328,92 +358,166 @@ function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa
             </span>
             {nextDay && <span className="text-xs text-orange-500 font-semibold">+1d</span>}
           </div>
-          {/* Flight numbers + duration */}
+
+          {/* Meta row: flight numbers | layover indicator | total duration */}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 flex-wrap">
             {flightNums && <span className="font-mono">{flightNums}</span>}
-            {flightNums && trip.paradas > 0 && <span>|</span>}
-            {trip.paradas > 0 && <span>⧖ conexão</span>}
+            {trip.paradas > 0 && <><span className="opacity-40">|</span><span>⧖ {trip.paradas} conexão</span></>}
             {trip.duracao_minutos && (
-              <>
-                <span>|</span>
+              <><span className="opacity-40">|</span>
                 <span className="flex items-center gap-0.5">
-                  <Clock className="h-3 w-3" />
-                  {formatDuration(trip.duracao_minutos)}
+                  <Clock className="h-3 w-3" />{formatDuration(trip.duracao_minutos)}
                 </span>
               </>
             )}
           </div>
-          {/* Buttons */}
+
+          {/* Action buttons */}
           <div className="flex items-center gap-2 mt-2.5 flex-wrap">
             <button
               onClick={() => setExpanded(!expanded)}
               className="inline-flex items-center gap-1 text-xs text-blue-500 border border-blue-300 dark:border-blue-700 rounded-full px-3 py-1 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors"
             >
               <PlaneTakeoff className="h-3 w-3" />
-              Detalhes {expanded ? "▲" : "▼"}
+              {expanded ? "Ocultar detalhes ▲" : "Ver detalhes ▼"}
             </button>
             {trip.link_reserva ? (
               <a href={trip.link_reserva} target="_blank" rel="noopener noreferrer">
                 <span className="inline-flex items-center gap-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-full px-3 py-1 cursor-pointer transition-colors">
-                  <ExternalLink className="h-3 w-3" /> Opções de reserva
+                  <ExternalLink className="h-3 w-3" /> Reservar via {nome}
                 </span>
               </a>
             ) : (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-full px-3 py-1 opacity-50">
-                Indisponível
+                Link indisponível
               </span>
             )}
           </div>
         </div>
 
-        {/* Cost + stops */}
-        <div className="flex-shrink-0 text-right space-y-0.5 min-w-[90px]">
+        {/* Cost block */}
+        <div className="flex-shrink-0 text-right space-y-0.5 min-w-[96px]">
           <p className="font-bold text-foreground">{formatMilhas(trip.milhas)}</p>
           {taxasStr && <p className="text-xs text-muted-foreground">+ {taxasStr}</p>}
           {trip.assentos != null && (
-            <p className="text-xs text-muted-foreground">{trip.assentos} assentos</p>
+            <p className="text-xs text-muted-foreground">{trip.assentos} assento{trip.assentos !== 1 ? "s" : ""}</p>
           )}
-          <div>
-            <span
-              className={`inline-block text-xs font-semibold px-2 py-0.5 rounded text-white ${
-                trip.paradas === 0 ? "bg-green-600" : "bg-blue-500"
-              }`}
-            >
-              {trip.paradas === 0 ? "Direto" : `${trip.paradas} parada${trip.paradas > 1 ? "s" : ""}`}
-            </span>
-          </div>
+          <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded text-white ${
+            trip.paradas === 0 ? "bg-green-600" : "bg-blue-500"
+          }`}>
+            {trip.paradas === 0 ? "Direto" : `${trip.paradas} parada${trip.paradas > 1 ? "s" : ""}`}
+          </span>
         </div>
       </div>
 
-      {/* Expanded segment details */}
+      {/* ── Expanded segment details ── */}
       {expanded && (
-        <div className="ml-12 mb-4 rounded-lg bg-muted/40 border border-border/60 divide-y divide-border/40 text-xs overflow-hidden">
-          {trip.segmentos.map((seg, i) => (
-            <div key={i}>
-              <div className="px-3 py-2.5">
-                <p className="font-semibold text-foreground">
-                  {seg.partida} {seg.origem} → {seg.destino} {seg.chegada}
-                </p>
-                <div className="flex items-center gap-2 text-muted-foreground mt-0.5 flex-wrap">
-                  {seg.numero_voo && <span className="font-mono">{seg.numero_voo}</span>}
-                  {seg.duracao_minutos && <span>| {formatDuration(seg.duracao_minutos)}</span>}
-                  {seg.aeronave && <span>| ✈ {seg.aeronave}</span>}
+        <div className="ml-12 mb-4 rounded-xl border border-border/60 bg-muted/30 overflow-hidden text-xs">
+          {trip.segmentos.map((seg, i) => {
+            const segIata = flightIata(seg.numero_voo);
+            const nextSeg = trip.segmentos[i + 1];
+            const isLast = i === trip.segmentos.length - 1;
+
+            // Layover: from API field or calculated from times
+            const layoverMins =
+              seg.layover_minutos ??
+              (seg.chegada && nextSeg?.partida
+                ? layoverMinutes(seg.chegada, nextSeg.partida)
+                : null);
+
+            return (
+              <div key={i}>
+                {/* Segment row */}
+                <div className="flex items-start gap-3 px-4 py-3">
+                  {/* Airline logo for this segment */}
+                  <div className="w-7 flex-shrink-0 flex justify-center pt-0.5">
+                    <SegmentLogo iata={segIata} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    {/* Flight number + aircraft */}
+                    <div className="flex items-center gap-2 font-medium text-foreground mb-1.5">
+                      {seg.numero_voo && (
+                        <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-[11px]">
+                          {seg.numero_voo}
+                        </span>
+                      )}
+                      {segIata && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-muted-foreground cursor-default">{segIata}</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p className="text-xs">CIA operadora: {segIata}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {seg.aeronave && (
+                        <span className="text-muted-foreground">· {seg.aeronave}</span>
+                      )}
+                    </div>
+
+                    {/* Departure → Arrival */}
+                    <div className="flex items-center gap-2">
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-foreground">{seg.partida || "—"}</p>
+                        <p className="font-mono font-semibold text-blue-500">{seg.origem}</p>
+                        <p className="text-muted-foreground leading-tight">{airportLabel(seg.origem).city || seg.origem}</p>
+                      </div>
+
+                      <div className="flex-1 flex flex-col items-center gap-0.5 px-2">
+                        <div className="flex items-center gap-1 w-full">
+                          <div className="flex-1 h-px bg-border" />
+                          <PlaneTakeoff className="h-3 w-3 text-muted-foreground" />
+                          <div className="flex-1 h-px bg-border" />
+                        </div>
+                        {seg.duracao_minutos && (
+                          <span className="text-muted-foreground whitespace-nowrap">
+                            {formatDuration(seg.duracao_minutos)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-foreground">{seg.chegada || "—"}</p>
+                        <p className="font-mono font-semibold text-blue-500">{seg.destino}</p>
+                        <p className="text-muted-foreground leading-tight">{airportLabel(seg.destino).city || seg.destino}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Layover divider */}
+                {!isLast && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-muted/60 border-y border-border/40 text-muted-foreground">
+                    <div className="flex-1 h-px bg-border/60" />
+                    <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px]">
+                      <Clock className="h-3 w-3" />
+                      {layoverMins
+                        ? `${formatDuration(layoverMins)} de escala em ${seg.destino}`
+                        : `Escala em ${seg.destino}`}
+                    </span>
+                    <div className="flex-1 h-px bg-border/60" />
+                  </div>
+                )}
               </div>
-              {i < trip.segmentos.length - 1 && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/60 text-muted-foreground">
-                  <div className="flex-1 h-px bg-border" />
-                  <span className="flex items-center gap-1 whitespace-nowrap">
-                    <Clock className="h-3 w-3" />
-                    {seg.chegada && trip.segmentos[i + 1]?.partida
-                      ? formatDuration(layoverMinutes(seg.chegada, trip.segmentos[i + 1].partida!)) + " escala"
-                      : "escala"}
-                  </span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-              )}
+            );
+          })}
+
+          {/* Footer: direct booking link */}
+          {trip.link_reserva && (
+            <div className="px-4 py-3 border-t border-border/60 bg-muted/50">
+              <a
+                href={trip.link_reserva}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-500 hover:text-blue-600 hover:underline"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Reservar diretamente via {nome}
+              </a>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>

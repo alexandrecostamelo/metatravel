@@ -31,10 +31,11 @@ CABINE_PREFIX = {
 class Segmento(BaseModel):
     origem: str
     destino: str
-    partida: Optional[str] = None   # HH:MM
-    chegada: Optional[str] = None   # HH:MM
+    partida: Optional[str] = None          # HH:MM
+    chegada: Optional[str] = None          # HH:MM
     numero_voo: Optional[str] = None
     duracao_minutos: Optional[int] = None
+    layover_minutos: Optional[int] = None  # escala após este segmento
     escala: bool = False
     aeronave: Optional[str] = None
 
@@ -53,6 +54,8 @@ class Trip(BaseModel):
     segmentos: list[Segmento] = []
     link_reserva: Optional[str] = None
     assentos: Optional[int] = None
+    airlines: list[str] = []          # CIAs operadoras (IATA), ex: ["AC","LH"]
+    source: Optional[str] = None      # programa/parceiro seats.aero
 
 
 def _build_link(source: str, origem: str, destino: str, data: str) -> Optional[str]:
@@ -83,6 +86,7 @@ def _parse_trips(data: dict, cabine: str, origem: str, destino: str, programa: s
             # Segmentos individuais
             segmentos: list[Segmento] = []
             for seg in item.get("Segments") or item.get("segments") or []:
+                layover_raw = seg.get("LayoverDuration") or seg.get("layoverDuration")
                 segmentos.append(Segmento(
                     origem=seg.get("Origin") or seg.get("OriginAirport") or origem,
                     destino=seg.get("Destination") or seg.get("DestinationAirport") or destino,
@@ -90,6 +94,7 @@ def _parse_trips(data: dict, cabine: str, origem: str, destino: str, programa: s
                     chegada=seg.get("ArrivalTime") or seg.get("arrivalTime"),
                     numero_voo=seg.get("FlightNumber") or seg.get("flightNumber"),
                     duracao_minutos=seg.get("Duration") or seg.get("duration"),
+                    layover_minutos=int(layover_raw) if layover_raw is not None else None,
                     aeronave=seg.get("Aircraft") or seg.get("aircraft"),
                     escala=seg.get("Stopover", False),
                 ))
@@ -108,6 +113,9 @@ def _parse_trips(data: dict, cabine: str, origem: str, destino: str, programa: s
             assentos_raw = item.get(f"{prefix}RemainingSeats")
             assentos = int(assentos_raw) if assentos_raw is not None else None
 
+            airlines_raw = item.get(f"{prefix}Airlines") or ""
+            airlines = [a.strip() for a in airlines_raw.split(",") if a.strip()]
+
             trips.append(Trip(
                 id=str(item.get("ID") or item.get("id") or len(trips)),
                 origem=item.get("OriginAirport") or origem,
@@ -122,6 +130,8 @@ def _parse_trips(data: dict, cabine: str, origem: str, destino: str, programa: s
                 segmentos=segmentos,
                 link_reserva=item.get("URL") or _build_link(programa, origem, destino, item.get("Date") or ""),
                 assentos=assentos,
+                airlines=airlines,
+                source=item.get("Source") or item.get("source") or programa,
             ))
         except Exception as exc:
             print(f"[trips] parse skip: {exc}")
