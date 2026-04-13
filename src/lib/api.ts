@@ -101,7 +101,7 @@ async function adminFetch(path: string, init?: RequestInit): Promise<Response> {
 
 export async function adminListarProgramas(): Promise<ProgramaAdmin[]> {
   const res = await adminFetch("/admin/programas");
-  if (!res.ok) throw new Error("Erro ao carregar programas");
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => "")}`);
   return res.json();
 }
 

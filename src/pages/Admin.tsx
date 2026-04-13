@@ -276,8 +276,8 @@ const Admin = () => {
     setLoading(true);
     try {
       setProgramas(await adminListarProgramas());
-    } catch {
-      toast.error("Erro ao carregar programas. Faça login novamente.");
+    } catch (err: any) {
+      toast.error(`Erro ao carregar programas: ${err?.message || err}`);
     } finally {
       setLoading(false);
     }

@@ -1,3 +1,4 @@
+import base64
 from typing import Optional
 from uuid import UUID
 
@@ -10,10 +11,19 @@ from app.config import settings
 _bearer = HTTPBearer(auto_error=False)
 
 
+def _jwt_secret() -> bytes:
+    """Retorna o segredo JWT decodificado de base64 (formato Supabase)."""
+    raw = settings.supabase_jwt_secret
+    try:
+        return base64.b64decode(raw)
+    except Exception:
+        return raw.encode()
+
+
 def _decode(token: str) -> dict:
     return jwt.decode(
         token,
-        settings.supabase_jwt_secret,
+        _jwt_secret(),
         algorithms=["HS256"],
         audience="authenticated",
     )
