@@ -72,7 +72,18 @@ def _parse_trips(data: dict, cabine: str, origem: str, destino: str, programa: s
     prefix = CABINE_PREFIX.get(cabine, "Y")
     trips: list[Trip] = []
 
-    for item in data.get("data", []):
+    items = data.get("data", [])
+    if items:
+        first = items[0]
+        print(f"[trips] keys no primeiro item: {list(first.keys())}")
+        segs = first.get("Segments") or first.get("segments") or []
+        if segs:
+            print(f"[trips] segmento[0] keys: {list(segs[0].keys())}")
+            print(f"[trips] segmento[0]: {segs[0]}")
+        else:
+            print(f"[trips] sem Segments — campos item: DepartureTime={first.get('DepartureTime')}, FlightNumber={first.get('FlightNumber')}, Aircraft={first.get('Aircraft')}, Distance={first.get('Distance')}, TotalDuration={first.get('TotalDuration')}")
+
+    for item in items:
         if not item.get(f"{prefix}Available"):
             continue
 
