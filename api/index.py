@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 
-from app.api import admin, airports, busca, buscas, cron, health, info, programas, trips
+from app.api import admin, airports, busca, buscas, cotacoes, cron, health, info, programas, trips
 from app.config import settings
 from app.middleware.rate_limit import RateLimitMiddleware
 
@@ -36,6 +36,7 @@ app.add_middleware(RateLimitMiddleware)
 
 app.include_router(health.router)
 app.include_router(info.router)
+app.include_router(cotacoes.router)
 app.include_router(airports.router)
 app.include_router(busca.router)
 app.include_router(programas.router)

@@ -43,15 +43,15 @@ const Navbar = () => {
             Turismo
           </span>
           {CURRENCIES.map(({ code, symbol }) => {
-            const val = cotacoes?.[code as keyof typeof cotacoes];
+            const val = cotacoes ? (cotacoes as Record<string, number>)[code] : null;
             return (
               <span key={code} className="flex items-center gap-1 text-xs mr-3">
                 <span className="font-semibold text-primary-foreground/80">{symbol}</span>
-                {loadingRates || !val ? (
+                {loadingRates || val == null ? (
                   <span className="inline-block w-10 h-3 rounded bg-white/10 animate-pulse" />
                 ) : (
                   <span className="text-primary-foreground/60">
-                    R$&nbsp;{(val as number).toFixed(2).replace(".", ",")}
+                    R$&nbsp;{val.toFixed(2).replace(".", ",")}
                   </span>
                 )}
               </span>

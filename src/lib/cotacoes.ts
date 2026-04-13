@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 
+const API_BASE = `${import.meta.env.VITE_API_URL || ""}/api`;
+
 export interface Cotacoes {
   USD: number;
   EUR: number;
@@ -13,16 +15,14 @@ let _cached: Cotacoes | null = null;
 let _fetchPromise: Promise<Cotacoes> | null = null;
 
 async function _fetchAPI(): Promise<Cotacoes> {
-  const res = await fetch(
-    "https://economia.awesomeapi.com.br/json/last/USD-BRLT,EUR-BRLT,GBP-BRLT,CAD-BRLT"
-  );
+  const res = await fetch(`${API_BASE}/cotacoes`);
   if (!res.ok) throw new Error("Erro ao buscar cotações");
   const data = await res.json();
   return {
-    USD: parseFloat(data.USDBRLT?.bid || "0"),
-    EUR: parseFloat(data.EURBRLT?.bid || "0"),
-    GBP: parseFloat(data.GBPBRLT?.bid || "0"),
-    CAD: parseFloat(data.CADBRLT?.bid || "0"),
+    USD: data.USD,
+    EUR: data.EUR,
+    GBP: data.GBP,
+    CAD: data.CAD,
     atualizado_em: new Date(),
   };
 }
