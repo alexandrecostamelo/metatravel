@@ -6,10 +6,10 @@ const Footer = () => (
       <div className="flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Plane className="h-5 w-5 text-gold" />
-          <span className="font-bold text-primary-foreground">Voo<span className="text-gradient-gold">Milhas</span></span>
+          <span className="font-bold text-primary-foreground">Meta<span className="text-gradient-gold">Travel</span></span>
         </div>
         <p className="text-sm text-center">
-          © {new Date().getFullYear()} VooMilhas. Todos os direitos reservados.
+          © {new Date().getFullYear()} MetaTravel. Todos os direitos reservados.
         </p>
       </div>
     </div>

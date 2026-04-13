@@ -92,7 +92,7 @@ const Busca = () => {
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl gradient-gold mb-4">
               <Plane className="h-7 w-7 text-gold-foreground" />
             </div>
-            <h1 className="text-3xl font-bold text-foreground">Buscar Passagens em Milhas</h1>
+            <h1 className="text-3xl font-bold text-foreground">Buscar Passagens — MetaTravel</h1>
             <p className="text-muted-foreground mt-2">Preencha os dados da sua viagem</p>
           </div>
 

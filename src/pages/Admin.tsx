@@ -272,12 +272,6 @@ const Admin = () => {
   const [modalNovo, setModalNovo] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) navigate("/login");
-    });
-  }, [navigate]);
-
   const carregar = async () => {
     setLoading(true);
     try {
@@ -289,7 +283,15 @@ const Admin = () => {
     }
   };
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        navigate("/login");
+      } else {
+        carregar();
+      }
+    });
+  }, [navigate]);
 
   const toggleAtivo = async (p: ProgramaAdmin) => {
     try {

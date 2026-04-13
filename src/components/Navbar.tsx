@@ -31,7 +31,7 @@ const Navbar = () => {
         <Link to="/" className="flex items-center gap-2">
           <Plane className="h-6 w-6 text-gold" />
           <span className="text-xl font-bold text-primary-foreground">
-            Voo<span className="text-gradient-gold">Milhas</span>
+            Meta<span className="text-gradient-gold">Travel</span>
           </span>
         </Link>
 

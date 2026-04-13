@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Passagens em Milhas",
+    title="MetaTravel",
     description="Busca, valora e compara passagens em milhas em R$",
     version="0.1.0",
     debug=settings.app_debug,
@@ -84,7 +84,7 @@ app.include_router(cotacoes.router)
 @app.get("/")
 async def root() -> dict[str, str]:
     return {
-        "app": "passagens-milhas",
+        "app": "metatravel",
         "docs": "/docs",
         "health": "/health",
     }

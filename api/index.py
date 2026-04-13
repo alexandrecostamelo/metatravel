@@ -19,7 +19,7 @@ ALLOWED_ORIGIN_PATTERNS = [
 ]
 
 app = FastAPI(
-    title="Passagens em Milhas API",
+    title="MetaTravel API",
     description="Busca, valora e compara passagens aéreas em milhas convertidas para R$",
     version="0.2.0",
     debug=settings.app_debug,
@@ -54,4 +54,4 @@ async def add_api_headers(request: Request, call_next) -> Response:
 
 @app.get("/")
 async def root() -> dict[str, str]:
-    return {"app": "passagens-milhas", "docs": "/docs", "health": "/api/health"}
+    return {"app": "metatravel", "docs": "/docs", "health": "/api/health"}
