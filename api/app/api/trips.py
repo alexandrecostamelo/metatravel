@@ -1,7 +1,8 @@
 """
-Endpoint de voos individuais — busca trips detalhados no seats.aero
-para uma rota/data/programa específicos.
-Docs: https://developers.seats.aero/reference/get-trips
+Endpoint de voos — busca disponibilidade no seats.aero via /search.
+A API retorna dados agregados por rota/data: milhas, taxas, CIAs, assentos,
+distância e se é direto. Detalhes por segmento (horário, número, aeronave)
+não são retornados pelo plano atual da API.
 """
 from typing import Optional
 
@@ -27,15 +28,25 @@ CABINE_PREFIX = {
     "primeira": "F",
 }
 
+SLUG_TO_SOURCE: dict[str, str] = {
+    "aeroplan": "aeroplan", "aadvantage": "american", "alaska": "alaska",
+    "smiles": "smiles", "azul": "azul", "latam_pass": "latam",
+    "united": "united", "delta": "delta", "emirates": "emirates",
+    "avios_british": "british", "avios_qatar": "qatar", "avios_iberia": "iberia",
+    "flying_blue": "flyingblue", "singapore": "singapore", "turkish": "turkish",
+    "lufthansa": "lufthansa", "tap": "tap", "finnair_plus": "finnair",
+    "virgin_atlantic": "virginatlantic", "etihad": "etihad", "qantas": "qantas",
+}
+
 
 class Segmento(BaseModel):
     origem: str
     destino: str
-    partida: Optional[str] = None          # HH:MM
-    chegada: Optional[str] = None          # HH:MM
+    partida: Optional[str] = None
+    chegada: Optional[str] = None
     numero_voo: Optional[str] = None
     duracao_minutos: Optional[int] = None
-    layover_minutos: Optional[int] = None  # escala após este segmento
+    layover_minutos: Optional[int] = None
     escala: bool = False
     aeronave: Optional[str] = None
 
@@ -54,9 +65,10 @@ class Trip(BaseModel):
     segmentos: list[Segmento] = []
     link_reserva: Optional[str] = None
     assentos: Optional[int] = None
-    airlines: list[str] = []          # CIAs operadoras (IATA), ex: ["AC","LH"]
-    source: Optional[str] = None      # programa/parceiro seats.aero
-    distancia_milhas: Optional[int] = None  # distância em milhas náuticas
+    airlines: list[str] = []
+    source: Optional[str] = None
+    distancia_milhas: Optional[int] = None
+    direto: bool = False
 
 
 def _build_link(source: str, origem: str, destino: str, data: str) -> Optional[str]:
@@ -68,86 +80,56 @@ def _build_link(source: str, origem: str, destino: str, data: str) -> Optional[s
         return None
 
 
-def _parse_trips(data: dict, cabine: str, origem: str, destino: str, programa: str) -> list[Trip]:
+def _parse_search(data: dict, cabine: str, origem: str, destino: str, programa: str) -> list[Trip]:
     prefix = CABINE_PREFIX.get(cabine, "Y")
     trips: list[Trip] = []
 
-    items = data.get("data", [])
-    if items:
-        first = items[0]
-        print(f"[trips] keys no primeiro item: {list(first.keys())}")
-        segs = first.get("Segments") or first.get("segments") or []
-        if segs:
-            print(f"[trips] segmento[0] keys: {list(segs[0].keys())}")
-            print(f"[trips] segmento[0]: {segs[0]}")
-        else:
-            print(f"[trips] sem Segments — campos item: DepartureTime={first.get('DepartureTime')}, FlightNumber={first.get('FlightNumber')}, Aircraft={first.get('Aircraft')}, Distance={first.get('Distance')}, TotalDuration={first.get('TotalDuration')}")
-
-    for item in items:
+    for item in data.get("data", []):
         if not item.get(f"{prefix}Available"):
             continue
 
         try:
-            milhas = int(item.get(f"{prefix}MileageCost") or 0)
-            taxas_raw = item.get(f"{prefix}TotalTaxes") or 0
+            # Milhas — campo Raw é int, campo sem Raw pode ser string
+            milhas = int(item.get(f"{prefix}MileageCostRaw") or item.get(f"{prefix}MileageCost") or 0)
+            taxas_raw = int(item.get(f"{prefix}TotalTaxesRaw") or item.get(f"{prefix}TotalTaxes") or 0)
             taxas_moeda = item.get("TaxesCurrency") or "USD"
             taxas_valor = float(taxas_raw) / 100
-            paradas = int(item.get("Stops") or 0)
-            duracao = item.get("TotalDuration") or item.get("Duration")
 
-            # Segmentos individuais
-            segmentos: list[Segmento] = []
-            for seg in item.get("Segments") or item.get("segments") or []:
-                layover_raw = seg.get("LayoverDuration") or seg.get("layoverDuration")
-                segmentos.append(Segmento(
-                    origem=seg.get("Origin") or seg.get("OriginAirport") or origem,
-                    destino=seg.get("Destination") or seg.get("DestinationAirport") or destino,
-                    partida=seg.get("DepartureTime") or seg.get("departureTime"),
-                    chegada=seg.get("ArrivalTime") or seg.get("arrivalTime"),
-                    numero_voo=seg.get("FlightNumber") or seg.get("flightNumber"),
-                    duracao_minutos=seg.get("Duration") or seg.get("duration"),
-                    layover_minutos=int(layover_raw) if layover_raw is not None else None,
-                    aeronave=seg.get("Aircraft") or seg.get("aircraft"),
-                    escala=seg.get("Stopover", False),
-                ))
+            direto = bool(item.get(f"{prefix}Direct") or item.get(f"{prefix}DirectRaw"))
+            paradas = 0 if direto else 1  # API não fornece número exato de paradas
 
-            # Se não tem segmentos, cria um sintético com os dados disponíveis
-            if not segmentos:
-                segmentos.append(Segmento(
-                    origem=item.get("OriginAirport") or origem,
-                    destino=item.get("DestinationAirport") or destino,
-                    partida=item.get("DepartureTime") or item.get("departureTime"),
-                    chegada=item.get("ArrivalTime") or item.get("arrivalTime"),
-                    numero_voo=item.get("FlightNumber") or item.get("flightNumber"),
-                    duracao_minutos=duracao,
-                ))
-
-            assentos_raw = item.get(f"{prefix}RemainingSeats")
+            assentos_raw = item.get(f"{prefix}RemainingSeatsRaw") or item.get(f"{prefix}RemainingSeats")
             assentos = int(assentos_raw) if assentos_raw is not None else None
 
-            airlines_raw = item.get(f"{prefix}Airlines") or ""
+            airlines_raw = item.get(f"{prefix}AirlinesRaw") or item.get(f"{prefix}Airlines") or ""
             airlines = [a.strip() for a in airlines_raw.split(",") if a.strip()]
 
-            dist_raw = item.get("Distance") or item.get("distance")
+            # Distância fica dentro de Route
+            route = item.get("Route") or {}
+            dist_raw = route.get("Distance")
             distancia_milhas = int(dist_raw) if dist_raw is not None else None
 
+            orig = route.get("OriginAirport") or origem
+            dest = route.get("DestinationAirport") or destino
+            source_slug = item.get("Source") or programa
+
             trips.append(Trip(
-                id=str(item.get("ID") or item.get("id") or len(trips)),
-                origem=item.get("OriginAirport") or origem,
-                destino=item.get("DestinationAirport") or destino,
+                id=str(item.get("ID") or len(trips)),
+                origem=orig,
+                destino=dest,
                 data=item.get("Date") or "",
                 cabine=cabine,
                 milhas=milhas,
                 taxas_valor=taxas_valor,
                 taxas_moeda=taxas_moeda,
                 paradas=paradas,
-                duracao_minutos=duracao,
-                segmentos=segmentos,
-                link_reserva=item.get("URL") or _build_link(programa, origem, destino, item.get("Date") or ""),
+                direto=direto,
                 assentos=assentos,
                 airlines=airlines,
-                source=item.get("Source") or item.get("source") or programa,
                 distancia_milhas=distancia_milhas,
+                link_reserva=item.get("URL") or _build_link(programa, orig, dest, item.get("Date") or ""),
+                source=source_slug,
+                segmentos=[],   # API não fornece segmentos individuais neste plano
             ))
         except Exception as exc:
             print(f"[trips] parse skip: {exc}")
@@ -164,23 +146,26 @@ async def get_trips(
     cabine: str = Query(default="economica"),
     programa: str = Query(default=""),
 ) -> list[Trip]:
-    """Retorna voos individuais do seats.aero para uma rota/data/programa."""
+    """Retorna disponibilidade de voos do seats.aero para uma rota/data/programa."""
     if not settings.seats_aero_api_key:
         return []
 
     cabin_en = CABINE_MAP.get(cabine, "economy")
+    source = SLUG_TO_SOURCE.get(programa, programa)
 
-    params = {
+    params: dict = {
         "origin_airport": origem.upper(),
         "destination_airport": destino.upper(),
         "start_date": data,
         "end_date": data,
         "cabin": cabin_en,
-        "take": 100,
+        "take": 20,
     }
+    if source:
+        params["source"] = source
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(
                 f"{settings.seats_aero_base_url}/search",
                 params=params,
@@ -195,4 +180,4 @@ async def get_trips(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    return _parse_trips(raw, cabine, origem.upper(), destino.upper(), programa)
+    return _parse_search(raw, cabine, origem.upper(), destino.upper(), programa)
