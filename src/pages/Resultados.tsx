@@ -308,7 +308,17 @@ function SegmentLogo({ iata }: { iata: string | null }) {
 function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa: string }) {
   const [expanded, setExpanded] = useState(false);
 
-  const operatingIatas: string[] = trip.airlines?.length ? trip.airlines : [];
+  const firstSeg = trip.segmentos[0];
+  const lastSeg = trip.segmentos[trip.segmentos.length - 1];
+  const depTime = firstSeg?.partida || null;
+  const arrTime = lastSeg?.chegada || null;
+  const nextDay = !!(depTime && arrTime && arrTime < depTime);
+  const firstFlightNum = firstSeg?.numero_voo || null;
+  const hasSegDetails = trip.segmentos.length > 0 && !!(depTime || firstFlightNum);
+
+  const operatingIatas: string[] = trip.airlines?.length
+    ? trip.airlines
+    : [...new Set(trip.segmentos.map((s) => flightIata(s.numero_voo)).filter(Boolean) as string[])];
 
   const taxasStr = Number(trip.taxas_valor) > 0
     ? trip.taxas_moeda === "BRL"
@@ -323,7 +333,7 @@ function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa
       {/* ── Summary row ── */}
       <div className="flex items-center gap-3 py-3.5">
 
-        {/* Operating airline logos */}
+        {/* Airline logos */}
         <div className="flex-shrink-0 w-10 flex flex-col items-center gap-0.5">
           {operatingIatas.length > 0
             ? operatingIatas.slice(0, 2).map((iata) => <SegmentLogo key={iata} iata={iata} />)
@@ -333,25 +343,34 @@ function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa
 
         {/* Flight info */}
         <div className="flex-1 min-w-0">
-          {/* Route */}
-          <div className="font-bold text-sm text-foreground">
-            {trip.origem} → {trip.destino}
+          {/* Route + times */}
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-bold text-sm text-foreground">
+              {depTime && <span>{depTime} </span>}
+              {trip.origem} → {trip.destino}
+              {arrTime && <span> {arrTime}</span>}
+            </span>
+            {nextDay && <span className="text-xs text-orange-500 font-semibold">+1d</span>}
           </div>
 
-          {/* Meta: CIAs | distância | direto/conexão */}
+          {/* Meta: flight number | duration | distance */}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 flex-wrap">
-            {operatingIatas.length > 0 && (
-              <span>{operatingIatas.join(", ")}</span>
-            )}
-            {trip.distancia_milhas && (
+            {firstFlightNum && <span className="font-mono">{firstFlightNum}</span>}
+            {trip.duracao_minutos && (
               <>
-                {operatingIatas.length > 0 && <span className="opacity-40">|</span>}
+                {firstFlightNum && <span className="opacity-40">|</span>}
+                <span className="flex items-center gap-0.5"><Clock className="h-3 w-3" />{formatDuration(trip.duracao_minutos)}</span>
+              </>
+            )}
+            {!hasSegDetails && trip.distancia_milhas && (
+              <>
+                <span className="opacity-40">|</span>
                 <span>{trip.distancia_milhas.toLocaleString("en-US")} mi</span>
               </>
             )}
           </div>
 
-          {/* Action buttons */}
+          {/* Buttons */}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <button
               onClick={() => setExpanded(!expanded)}
@@ -374,78 +393,111 @@ function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa
           </div>
         </div>
 
-        {/* Cost block */}
+        {/* Cost */}
         <div className="flex-shrink-0 text-right space-y-0.5 min-w-[96px]">
           <p className="font-bold text-sm text-foreground">{formatMilhas(trip.milhas)}</p>
           {taxasStr && <p className="text-xs text-muted-foreground">+ {taxasStr}</p>}
           {trip.assentos != null && (
             <p className="text-xs text-muted-foreground">T, {trip.assentos} assento{trip.assentos !== 1 ? "s" : ""}</p>
           )}
-          <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded text-white ${
-            isDireto ? "bg-green-600" : "bg-blue-500"
-          }`}>
+          <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded text-white ${isDireto ? "bg-green-600" : "bg-blue-500"}`}>
             {isDireto ? "Direto" : "Conexão"}
           </span>
         </div>
       </div>
 
-      {/* ── Expanded details ── */}
+      {/* ── Expanded ── */}
       {expanded && (
-        <div className="ml-12 mb-3 rounded-lg border border-border/60 bg-muted/20 text-xs">
-          <div className="px-4 py-3 space-y-2">
-            {/* Route */}
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-24">Rota</span>
-              <span className="font-medium">{trip.origem} → {trip.destino}</span>
-            </div>
-            {/* CIAs */}
-            {operatingIatas.length > 0 && (
+        <div className="ml-12 mb-3 rounded-lg border border-border/60 bg-muted/20 overflow-hidden text-xs">
+          {trip.segmentos.length > 0 ? (
+            /* Segmentos detalhados */
+            trip.segmentos.map((seg, i) => {
+              const segIata = flightIata(seg.numero_voo);
+              const nextSeg = trip.segmentos[i + 1];
+              const isLast = i === trip.segmentos.length - 1;
+              const layoverMins = seg.layover_minutos ??
+                (seg.chegada && nextSeg?.partida ? layoverMinutes(seg.chegada, nextSeg.partida) : null);
+              return (
+                <div key={i}>
+                  <div className="px-4 py-3">
+                    {/* Times */}
+                    {(seg.partida || seg.chegada) && (
+                      <div className="flex items-baseline gap-1 mb-1 font-bold text-sm text-foreground">
+                        {seg.partida && <span>{seg.partida}</span>}
+                        <span className="text-muted-foreground font-normal">{seg.origem} → {seg.destino}</span>
+                        {seg.chegada && <span>{seg.chegada}</span>}
+                      </div>
+                    )}
+                    {/* Detail line */}
+                    <div className="flex items-center gap-1.5 text-muted-foreground flex-wrap">
+                      <SegmentLogo iata={segIata} />
+                      {seg.numero_voo && <span className="font-mono text-foreground font-medium">{seg.numero_voo}</span>}
+                      {seg.duracao_minutos && (
+                        <><span className="opacity-40">|</span>
+                          <span className="flex items-center gap-0.5"><Clock className="h-3 w-3" />{formatDuration(seg.duracao_minutos)}</span>
+                        </>
+                      )}
+                      {i === 0 && trip.distancia_milhas && (
+                        <><span className="opacity-40">|</span>
+                          <span>{trip.distancia_milhas.toLocaleString("en-US")} mi</span>
+                        </>
+                      )}
+                      {seg.aeronave && (
+                        <><span className="opacity-40">|</span><span>✈ {seg.aeronave}</span></>
+                      )}
+                    </div>
+                  </div>
+                  {!isLast && (
+                    <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/50 border-y border-border/40 text-muted-foreground">
+                      <Clock className="h-3 w-3 flex-shrink-0" />
+                      <span className="text-[11px]">
+                        {layoverMins ? `${formatDuration(layoverMins)} de escala em ${seg.destino}` : `Escala em ${seg.destino}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            /* Fallback: sem segmentos — mostra dados agregados */
+            <div className="px-4 py-3 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground w-24">CIA operadora</span>
                 <div className="flex items-center gap-1.5">
-                  {operatingIatas.map((iata) => (
-                    <span key={iata} className="flex items-center gap-1">
-                      <SegmentLogo iata={iata} />
-                      <span className="font-mono font-medium">{iata}</span>
-                    </span>
-                  ))}
+                  {operatingIatas.length > 0
+                    ? operatingIatas.map((iata) => (
+                        <span key={iata} className="flex items-center gap-1">
+                          <SegmentLogo iata={iata} />
+                          <span className="font-mono font-medium">{iata}</span>
+                        </span>
+                      ))
+                    : <span className="text-muted-foreground">—</span>}
                 </div>
               </div>
-            )}
-            {/* Distância */}
-            {trip.distancia_milhas && (
+              {trip.distancia_milhas && (
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground w-24">Distância</span>
+                  <span className="font-medium">{trip.distancia_milhas.toLocaleString("en-US")} milhas</span>
+                </div>
+              )}
+              {trip.assentos != null && (
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground w-24">Assentos</span>
+                  <span className="font-medium">{trip.assentos}</span>
+                </div>
+              )}
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground w-24">Distância</span>
-                <span className="font-medium">{trip.distancia_milhas.toLocaleString("en-US")} milhas</span>
+                <span className="text-muted-foreground w-24">Tipo</span>
+                <span className={`font-semibold ${isDireto ? "text-green-600" : "text-blue-500"}`}>
+                  {isDireto ? "Voo direto" : "Com conexão"}
+                </span>
               </div>
-            )}
-            {/* Assentos */}
-            {trip.assentos != null && (
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground w-24">Assentos disp.</span>
-                <span className="font-medium">{trip.assentos}</span>
-              </div>
-            )}
-            {/* Tipo */}
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-24">Tipo</span>
-              <span className={`font-semibold ${isDireto ? "text-green-600" : "text-blue-500"}`}>
-                {isDireto ? "Voo direto" : "Com conexão"}
-              </span>
             </div>
-            {/* Programa */}
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-24">Programa</span>
-              <span className="font-medium">{nome}</span>
-            </div>
-          </div>
+          )}
 
           {trip.link_reserva && (
             <div className="px-4 py-2.5 border-t border-border/60 bg-muted/40">
-              <a
-                href={trip.link_reserva}
-                target="_blank"
-                rel="noopener noreferrer"
+              <a href={trip.link_reserva} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-500 hover:text-blue-600 hover:underline"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
