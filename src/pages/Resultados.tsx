@@ -182,43 +182,62 @@ function formatBRL(v: number | null): string {
   return "R$ " + n.toFixed(2).replace(".", ",");
 }
 
-/** Renderiza a taxa de embarque: se for moeda estrangeira, converte para BRL
- *  com tooltip mostrando o valor original + "valores aproximados". */
-function renderTaxa(
-  taxasValor: number,
-  taxasMoeda: string,
-  taxasBrl: number | null,
-  cotacoes: Cotacoes | null
-): React.ReactNode {
-  const valor = Number(taxasValor);
-  if (valor <= 0) return null;
+/** Renderiza o total (milhas BRL + taxa) com tooltip de detalhamento. */
+function renderTotal(info: CabineInfo, cotacoes: Cotacoes | null): React.ReactNode {
+  const milhasBrl = Number(info.custo_total_brl) - Number(info.taxas_brl ?? 0);
+  const taxasValor = Number(info.taxas_valor);
+  const isEstrangeira = info.taxas_moeda !== "BRL" && taxasValor > 0;
 
-  if (taxasMoeda === "BRL") {
-    return <span>+ {formatBRL(taxasBrl)}</span>;
+  // Calcula taxa em BRL: live rate se disponível, senão stored
+  let taxasBrlFinal = Number(info.taxas_brl ?? 0);
+  let isAproximado = false;
+  if (isEstrangeira) {
+    const converted = converterParaBRL(taxasValor, info.taxas_moeda, cotacoes);
+    if (converted != null) { taxasBrlFinal = converted; isAproximado = true; }
   }
 
-  const brl = converterParaBRL(valor, taxasMoeda, cotacoes);
-  if (brl != null) {
+  const total = milhasBrl + taxasBrlFinal;
+  const hasTaxa = taxasValor > 0;
+
+  const tooltipContent = (
+    <div className="space-y-1 text-xs">
+      {isEstrangeira && (
+        <div className="flex justify-between gap-4">
+          <span className="text-muted-foreground">Taxa original:</span>
+          <span className="font-medium">{info.taxas_moeda} {taxasValor.toFixed(2).replace(".", ",")}</span>
+        </div>
+      )}
+      {hasTaxa && (
+        <div className="flex justify-between gap-4">
+          <span className="text-muted-foreground">Taxa em R$:</span>
+          <span className="font-medium">{formatBRL(taxasBrlFinal)}</span>
+        </div>
+      )}
+      <div className="flex justify-between gap-4">
+        <span className="text-muted-foreground">Passagem:</span>
+        <span className="font-medium">{formatBRL(milhasBrl)}</span>
+      </div>
+      {isAproximado && (
+        <p className="text-[10px] text-muted-foreground/60 pt-0.5 border-t border-border">valores aproximados</p>
+      )}
+    </div>
+  );
+
+  if (hasTaxa) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="cursor-help inline-flex items-center gap-0.5">
-            + {formatBRL(brl)}
-            <span className="text-[10px] opacity-50 ml-0.5">≈</span>
+            {formatBRL(total)}
+            {isAproximado && <span className="text-[10px] opacity-50">≈</span>}
           </span>
         </TooltipTrigger>
-        <TooltipContent side="top">
-          <p className="text-xs font-medium">
-            {taxasMoeda} {valor.toFixed(2).replace(".", ",")}
-          </p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">valores aproximados</p>
-        </TooltipContent>
+        <TooltipContent side="top">{tooltipContent}</TooltipContent>
       </Tooltip>
     );
   }
 
-  // Cotações ainda não carregadas — exibe moeda original
-  return <span>+ {taxasMoeda} {valor.toFixed(2).replace(".", ",")}</span>;
+  return <span>{formatBRL(total)}</span>;
 }
 
 function groupOfertas(ofertas: Oferta[]): ResultRow[] {
@@ -730,11 +749,9 @@ const Resultados = () => {
                                           {info.milhas.toLocaleString("pt-BR")} pts
                                         </span>
                                       )}
-                                      {/* Valor das milhas em BRL + taxa de embarque */}
                                       {info.custo_total_brl != null && (
-                                        <div className="text-xs text-muted-foreground text-center leading-tight space-y-0.5">
-                                          <div>{formatBRL(Number(info.custo_total_brl) - Number(info.taxas_brl ?? 0))}</div>
-                                          <div>{renderTaxa(info.taxas_valor, info.taxas_moeda, info.taxas_brl, cotacoes)}</div>
+                                        <div className="text-xs text-muted-foreground text-center mt-0.5">
+                                          {renderTotal(info, cotacoes)}
                                         </div>
                                       )}
                                     </div>
