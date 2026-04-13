@@ -1,21 +1,19 @@
 """
-Cotações de câmbio turismo (BRL) para USD, EUR, GBP e CAD.
-Fonte: economia.awesomeapi.com.br  (par *-BRLT = câmbio turismo)
-Cache in-process de 15 minutos para não bater na API a cada request.
+Cotações de câmbio turismo (BRL).
+- USD e EUR: par *-BRLT (câmbio turismo oficial da AwesomeAPI)
+- GBP e CAD: par *-BRL comercial (BRLT não existe para essas moedas)
+Todos usam o campo `ask` (taxa de venda — o que o turista paga).
+Cache in-process de 15 minutos.
 """
+import asyncio
 import time
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 router = APIRouter()
-
-AWESOME_URL = (
-    "https://economia.awesomeapi.com.br/json/last/"
-    "USD-BRLT,EUR-BRLT,GBP-BRLT,CAD-BRLT"
-)
 
 _cache: Optional[dict] = None
 _cache_ts: float = 0
@@ -27,7 +25,14 @@ class CotacoesResponse(BaseModel):
     EUR: float
     GBP: float
     CAD: float
-    fonte: str = "awesomeapi / câmbio turismo"
+    fonte: str = "awesomeapi"
+
+
+async def _fetch_pairs(client: httpx.AsyncClient, pairs: str) -> dict:
+    url = f"https://economia.awesomeapi.com.br/json/last/{pairs}"
+    resp = await client.get(url)
+    resp.raise_for_status()
+    return resp.json()
 
 
 @router.get("/api/cotacoes", response_model=CotacoesResponse)
@@ -37,19 +42,23 @@ async def get_cotacoes() -> CotacoesResponse:
     if _cache and (time.time() - _cache_ts) < CACHE_TTL:
         return CotacoesResponse(**_cache)
 
-    async with httpx.AsyncClient(timeout=8.0) as client:
-        resp = await client.get(AWESOME_URL)
-        resp.raise_for_status()
-        data = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            # USD e EUR têm par BRLT (turismo); GBP e CAD só têm BRL (comercial)
+            turismo, comercial = await asyncio.gather(
+                _fetch_pairs(client, "USD-BRLT,EUR-BRLT"),
+                _fetch_pairs(client, "GBP-BRL,CAD-BRL"),
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Erro ao buscar cotações: {exc}")
 
     rates = {
-        "USD": float(data.get("USDBRLT", {}).get("bid", 0)),
-        "EUR": float(data.get("EURBRLT", {}).get("bid", 0)),
-        "GBP": float(data.get("GBPBRLT", {}).get("bid", 0)),
-        "CAD": float(data.get("CADBRLT", {}).get("bid", 0)),
+        "USD": float(turismo.get("USDBRLT", {}).get("ask", 0)),
+        "EUR": float(turismo.get("EURBRLT", {}).get("ask", 0)),
+        "GBP": float(comercial.get("GBPBRL", {}).get("ask", 0)),
+        "CAD": float(comercial.get("CADBRL", {}).get("ask", 0)),
     }
 
     _cache = rates
     _cache_ts = time.time()
-
     return CotacoesResponse(**rates)
