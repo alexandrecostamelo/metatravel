@@ -129,6 +129,7 @@ export interface Trip {
   assentos?: number | null;
   airlines?: string[];
   source?: string | null;
+  distancia_milhas?: number | null;
 }
 
 export async function fetchTrips(

@@ -56,6 +56,7 @@ class Trip(BaseModel):
     assentos: Optional[int] = None
     airlines: list[str] = []          # CIAs operadoras (IATA), ex: ["AC","LH"]
     source: Optional[str] = None      # programa/parceiro seats.aero
+    distancia_milhas: Optional[int] = None  # distância em milhas náuticas
 
 
 def _build_link(source: str, origem: str, destino: str, data: str) -> Optional[str]:
@@ -116,6 +117,9 @@ def _parse_trips(data: dict, cabine: str, origem: str, destino: str, programa: s
             airlines_raw = item.get(f"{prefix}Airlines") or ""
             airlines = [a.strip() for a in airlines_raw.split(",") if a.strip()]
 
+            dist_raw = item.get("Distance") or item.get("distance")
+            distancia_milhas = int(dist_raw) if dist_raw is not None else None
+
             trips.append(Trip(
                 id=str(item.get("ID") or item.get("id") or len(trips)),
                 origem=item.get("OriginAirport") or origem,
@@ -132,6 +136,7 @@ def _parse_trips(data: dict, cabine: str, origem: str, destino: str, programa: s
                 assentos=assentos,
                 airlines=airlines,
                 source=item.get("Source") or item.get("source") or programa,
+                distancia_milhas=distancia_milhas,
             ))
         except Exception as exc:
             print(f"[trips] parse skip: {exc}")
