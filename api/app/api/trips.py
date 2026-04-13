@@ -114,33 +114,67 @@ def _parse_avail_item(item: dict, cabine: str, origem: str, destino: str, progra
     }
 
 
+def _iso_to_hhmm(iso: Optional[str]) -> Optional[str]:
+    """Extrai HH:MM de um datetime ISO 8601 (ex: '2026-05-21T23:45:00Z' → '23:45')."""
+    if not iso:
+        return None
+    try:
+        t = iso[11:16]  # posição fixa em ISO 8601
+        if len(t) == 5 and ":" in t:
+            return t
+    except Exception:
+        pass
+    return None
+
+
 def _parse_trip_detail(flight: dict, avail: dict, cabine: str, idx: int) -> Trip:
     """Converte um voo individual do endpoint /trips/{id} em Trip."""
     segs: list[Segmento] = []
-    for seg in flight.get("Segments") or flight.get("segments") or []:
-        layover_raw = seg.get("LayoverDuration") or seg.get("layoverDuration")
+    raw_segs = flight.get("AvailabilitySegments") or flight.get("Segments") or flight.get("segments") or []
+    for i, seg in enumerate(raw_segs):
+        next_seg = raw_segs[i + 1] if i + 1 < len(raw_segs) else None
+        # Calcula layover: diferença entre chegada deste e partida do próximo
+        layover_mins: Optional[int] = None
+        if next_seg:
+            try:
+                from datetime import datetime, timezone
+                arr = datetime.fromisoformat(seg["ArrivesAt"].replace("Z", "+00:00"))
+                dep = datetime.fromisoformat(next_seg["DepartsAt"].replace("Z", "+00:00"))
+                layover_mins = int((dep - arr).total_seconds() / 60)
+            except Exception:
+                pass
+
         segs.append(Segmento(
-            origem=seg.get("Origin") or seg.get("OriginAirport") or avail["origem"],
-            destino=seg.get("Destination") or seg.get("DestinationAirport") or avail["destino"],
-            partida=seg.get("DepartureTime") or seg.get("departureTime"),
-            chegada=seg.get("ArrivalTime") or seg.get("arrivalTime"),
-            numero_voo=seg.get("FlightNumber") or seg.get("flightNumber"),
-            duracao_minutos=seg.get("Duration") or seg.get("duration"),
-            layover_minutos=int(layover_raw) if layover_raw is not None else None,
-            aeronave=seg.get("Aircraft") or seg.get("aircraft"),
-            escala=seg.get("Stopover", False),
+            origem=seg.get("OriginAirport") or avail["origem"],
+            destino=seg.get("DestinationAirport") or avail["destino"],
+            partida=_iso_to_hhmm(seg.get("DepartsAt")),
+            chegada=_iso_to_hhmm(seg.get("ArrivesAt")),
+            numero_voo=seg.get("FlightNumber"),
+            duracao_minutos=seg.get("Duration") or None,
+            layover_minutos=layover_mins,
+            aeronave=seg.get("AircraftName") or seg.get("Aircraft"),
+            escala=i < len(raw_segs) - 1,
         ))
 
-    duracao = flight.get("TotalDuration") or flight.get("Duration") or flight.get("duration")
-    paradas = int(flight.get("Stops") or flight.get("stops") or (0 if avail["direto"] else len(segs) - 1))
-    airlines_raw = flight.get("Airlines") or flight.get("airlines") or ""
-    if isinstance(airlines_raw, list):
-        airlines = airlines_raw
-    else:
-        airlines = [a.strip() for a in str(airlines_raw).split(",") if a.strip()] or avail["airlines"]
+    paradas = max(0, len(segs) - 1)
+    # Duração total = soma dos segmentos + layovers
+    total_dur = avail.get("duracao_minutos") or flight.get("TotalDuration")
+    if not total_dur and segs:
+        seg_dur = sum(s.duracao_minutos or 0 for s in segs)
+        lay_dur = sum(s.layover_minutos or 0 for s in segs)
+        total_dur = seg_dur + lay_dur if seg_dur else None
+
+    # CIAs: extraídas dos números de voo dos segmentos
+    airlines = list({
+        s.numero_voo[:2] for s in segs
+        if s.numero_voo and len(s.numero_voo) >= 2
+    }) or avail["airlines"]
+
+    # Distância total = soma das distâncias dos segmentos
+    dist = sum(seg.get("Distance") or 0 for seg in raw_segs) or avail["distancia_milhas"]
 
     return Trip(
-        id=str(flight.get("ID") or flight.get("id") or f"{avail['id']}_{idx}"),
+        id=str(flight.get("ID") or f"{avail['id']}_{idx}"),
         origem=avail["origem"],
         destino=avail["destino"],
         data=avail["data"],
@@ -150,11 +184,11 @@ def _parse_trip_detail(flight: dict, avail: dict, cabine: str, idx: int) -> Trip
         taxas_moeda=avail["taxas_moeda"],
         paradas=paradas,
         direto=paradas == 0,
-        duracao_minutos=int(duracao) if duracao else None,
+        duracao_minutos=int(total_dur) if total_dur else None,
         segmentos=segs,
         assentos=avail["assentos"],
         airlines=airlines,
-        distancia_milhas=avail["distancia_milhas"],
+        distancia_milhas=int(dist) if dist else None,
         link_reserva=flight.get("URL") or avail["link_reserva"],
         source=avail["source"],
     )
@@ -218,13 +252,14 @@ async def get_trips(
                     )
                     if r.status_code == 200:
                         flights = r.json()
-                        if isinstance(flights, list) and flights:
-                            return [_parse_trip_detail(f, avail, cabine, i) for i, f in enumerate(flights)]
-                        # Alguns planos retornam objeto com lista interna
+                        # Resposta: {"data": [...], "booking_links": ..., "carriers": ...}
+                        inner: list = []
                         if isinstance(flights, dict):
-                            inner = flights.get("data") or flights.get("trips") or []
-                            if inner:
-                                return [_parse_trip_detail(f, avail, cabine, i) for i, f in enumerate(inner)]
+                            inner = flights.get("data") or []
+                        elif isinstance(flights, list):
+                            inner = flights
+                        if inner:
+                            return [_parse_trip_detail(f, avail, cabine, i) for i, f in enumerate(inner)]
                 except Exception as exc:
                     print(f"[trips] /trips/{avail_item['ID']} erro: {exc}")
                 # Fallback: retorna um Trip com os dados de disponibilidade
