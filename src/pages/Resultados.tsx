@@ -691,13 +691,13 @@ const Resultados = () => {
                                       {/* Valor das milhas em BRL + taxa de embarque */}
                                       {info.custo_total_brl != null && (
                                         <div className="text-xs text-muted-foreground text-center leading-tight">
-                                          <span>{formatBRL(info.custo_total_brl - (info.taxas_brl ?? 0))}</span>
-                                          {info.taxas_valor > 0 && (
+                                          <span>{formatBRL(Number(info.custo_total_brl) - Number(info.taxas_brl ?? 0))}</span>
+                                          {Number(info.taxas_valor) > 0 && (
                                             <span className="text-muted-foreground/70">
                                               {" + "}
                                               {info.taxas_moeda === "BRL"
                                                 ? formatBRL(info.taxas_brl)
-                                                : `${info.taxas_moeda} ${info.taxas_valor.toFixed(2).replace(".", ",")}`}
+                                                : `${info.taxas_moeda} ${Number(info.taxas_valor).toFixed(2).replace(".", ",")}`}
                                             </span>
                                           )}
                                         </div>
