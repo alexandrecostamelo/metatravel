@@ -44,6 +44,57 @@ const PROGRAM_NAMES: Record<string, string> = {
   qantas: "Qantas",
 };
 
+const LABEL_TO_SLUG: Record<string, string> = {
+  "aeroplan": "aeroplan",
+  "air canada aeroplan": "aeroplan",
+  "american": "aadvantage",
+  "american airlines aadvantage": "aadvantage",
+  "alaska": "alaska",
+  "alaska mileage plan": "alaska",
+  "smiles": "smiles",
+  "azul": "azul",
+  "latam pass": "latam_pass",
+  "latam": "latam_pass",
+  "united": "united",
+  "united mileageplus": "united",
+  "delta": "delta",
+  "delta skymiles": "delta",
+  "emirates": "emirates",
+  "emirates skywards": "emirates",
+  "british airways": "avios_british",
+  "british airways avios": "avios_british",
+  "qatar airways": "avios_qatar",
+  "iberia": "avios_iberia",
+  "air france-klm flying blue": "flying_blue",
+  "flying blue": "flying_blue",
+  "air france": "flying_blue",
+  "singapore airlines krisflyer": "singapore",
+  "singapore": "singapore",
+  "turkish airlines miles&smiles": "turkish",
+  "turkish": "turkish",
+  "lufthansa miles & more": "lufthansa",
+  "lufthansa": "lufthansa",
+  "tap miles&go": "tap",
+  "tap": "tap",
+  "finnair plus": "finnair_plus",
+  "finnair": "finnair_plus",
+  "virgin atlantic flying club": "virgin_atlantic",
+  "virgin atlantic": "virgin_atlantic",
+  "etihad guest": "etihad",
+  "etihad": "etihad",
+  "qantas frequent flyer": "qantas",
+  "qantas": "qantas",
+};
+
+function labelToProgSlug(label: string): string | null {
+  const cleaned = label.replace(/^Book via /i, "").toLowerCase().trim();
+  if (LABEL_TO_SLUG[cleaned]) return LABEL_TO_SLUG[cleaned];
+  for (const [key, slug] of Object.entries(LABEL_TO_SLUG)) {
+    if (cleaned.includes(key) || key.includes(cleaned)) return slug;
+  }
+  return null;
+}
+
 const PROGRAM_IATA: Record<string, string> = {
   aeroplan: "AC",
   aadvantage: "AA",
@@ -227,9 +278,9 @@ function renderTotal(info: CabineInfo, cotacoes: Cotacoes | null): React.ReactNo
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="cursor-help inline-flex items-center gap-0.5">
+          <span className="cursor-help inline-flex items-center gap-0.5 font-bold text-green-600 dark:text-green-400">
             {formatBRL(total)}
-            {isAproximado && <span className="text-[10px] opacity-50">≈</span>}
+            {isAproximado && <span className="text-[10px] opacity-60 font-normal">≈</span>}
           </span>
         </TooltipTrigger>
         <TooltipContent side="top">{tooltipContent}</TooltipContent>
@@ -237,7 +288,7 @@ function renderTotal(info: CabineInfo, cotacoes: Cotacoes | null): React.ReactNo
     );
   }
 
-  return <span>{formatBRL(total)}</span>;
+  return <span className="font-bold text-green-600 dark:text-green-400">{formatBRL(total)}</span>;
 }
 
 function groupOfertas(ofertas: Oferta[]): ResultRow[] {
@@ -305,9 +356,47 @@ function SegmentLogo({ iata }: { iata: string | null }) {
   );
 }
 
-function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa: string }) {
+function TripCard({
+  trip, nome, programa, allRows, activeCabine, cotacoes,
+}: {
+  trip: Trip; nome: string; programa: string;
+  allRows: ResultRow[]; activeCabine: string; cotacoes: Cotacoes | null;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [showBooking, setShowBooking] = useState(false);
+  const [extraInfo, setExtraInfo] = useState<Record<string, { milhas: number; taxas_valor: number; taxas_moeda: string } | null>>({});
+  const [loadingExtra, setLoadingExtra] = useState(false);
+
+  useEffect(() => {
+    if (!showBooking || !trip.booking_links?.length) return;
+    const missingPrograms = trip.booking_links
+      .map((bl) => labelToProgSlug(bl.label))
+      .filter((slug): slug is string =>
+        !!slug && !allRows.find((r) => r.programa === slug) && !(slug in extraInfo)
+      );
+    if (!missingPrograms.length) return;
+    setLoadingExtra(true);
+    Promise.all(
+      missingPrograms.map((slug) =>
+        fetchTrips(trip.origem, trip.destino, trip.data, activeCabine, slug)
+          .then((trips) => {
+            if (trips.length > 0) {
+              return [slug, { milhas: trips[0].milhas, taxas_valor: trips[0].taxas_valor, taxas_moeda: trips[0].taxas_moeda }] as const;
+            }
+            return [slug, null] as const;
+          })
+          .catch(() => [slug, null] as const)
+      )
+    ).then((results) => {
+      setExtraInfo((prev) => {
+        const next = { ...prev };
+        for (const [slug, data] of results) next[slug] = data;
+        return next;
+      });
+      setLoadingExtra(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showBooking]);
 
   const firstSeg = trip.segmentos[0];
   const lastSeg = trip.segmentos[trip.segmentos.length - 1];
@@ -399,16 +488,26 @@ function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa
         </div>
 
         {/* Cost */}
-        <div className="flex-shrink-0 text-right space-y-0.5 min-w-[96px]">
-          <p className="font-bold text-sm text-foreground">{formatMilhas(trip.milhas)}</p>
-          {taxasStr && <p className="text-xs text-muted-foreground">+ {taxasStr}</p>}
-          {trip.assentos != null && (
-            <p className="text-xs text-muted-foreground">T, {trip.assentos} assento{trip.assentos !== 1 ? "s" : ""}</p>
-          )}
-          <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded text-white ${isDireto ? "bg-green-600" : "bg-blue-500"}`}>
-            {isDireto ? "Direto" : "Conexão"}
-          </span>
-        </div>
+        {(() => {
+          const currentRowInfo = allRows
+            .find((r) => r.programa === programa && r.origem === trip.origem && r.destino === trip.destino)
+            ?.cabines[activeCabine] ?? null;
+          return (
+            <div className="flex-shrink-0 text-right space-y-0.5 min-w-[96px]">
+              <p className="font-bold text-sm text-foreground">{formatMilhas(trip.milhas)}</p>
+              {taxasStr && <p className="text-xs text-muted-foreground">+ {taxasStr}</p>}
+              {currentRowInfo?.custo_total_brl != null && (
+                <div className="text-sm">{renderTotal(currentRowInfo, cotacoes)}</div>
+              )}
+              {trip.assentos != null && (
+                <p className="text-xs text-muted-foreground">T, {trip.assentos} assento{trip.assentos !== 1 ? "s" : ""}</p>
+              )}
+              <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded text-white ${isDireto ? "bg-green-600" : "bg-blue-500"}`}>
+                {isDireto ? "Direto" : "Conexão"}
+              </span>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Expanded ── */}
@@ -506,28 +605,88 @@ function TripCard({ trip, nome, programa }: { trip: Trip; nome: string; programa
       {/* ── Opções de reserva (fora do expanded) ── */}
       {showBooking && trip.booking_links && trip.booking_links.length > 0 && (
         <div className="ml-12 mb-3 rounded-lg border border-border/60 overflow-hidden text-xs">
-          {trip.booking_links.map((bl, i) => (
-            <a
-              key={i}
-              href={bl.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center justify-between px-4 py-2.5 hover:bg-muted/40 transition-colors ${i > 0 ? "border-t border-border/40" : ""} ${bl.primary ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}`}
-            >
-              <span className={`font-medium ${bl.primary ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
-                {bl.label.replace("Book via ", "")}
-                {bl.primary && <span className="ml-1.5 text-[10px] text-blue-500 font-normal">· principal</span>}
-              </span>
-              <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-            </a>
-          ))}
+          {trip.booking_links.map((bl, i) => {
+            const cleanLabel = bl.label.replace(/^Book via /i, "");
+            const slug = labelToProgSlug(bl.label);
+            const iata = slug ? PROGRAM_IATA[slug] : null;
+            const matchedRow = slug
+              ? allRows.find((r) => r.programa === slug && r.origem === trip.origem && r.destino === trip.destino)
+              : null;
+            const rowInfo = matchedRow?.cabines[activeCabine] ?? null;
+            const fallback = slug ? extraInfo[slug] : null;
+            const milhasVal = rowInfo?.milhas ?? fallback?.milhas;
+            const taxasValorVal = rowInfo?.taxas_valor ?? fallback?.taxas_valor;
+            const taxasMoedaVal = rowInfo?.taxas_moeda ?? fallback?.taxas_moeda;
+            const hasData = milhasVal != null;
+            const taxasStr = hasData && Number(taxasValorVal) > 0
+              ? (taxasMoedaVal === "BRL"
+                  ? `R$ ${Number(taxasValorVal).toFixed(2).replace(".", ",")}`
+                  : `${taxasMoedaVal} ${Number(taxasValorVal).toFixed(2)}`)
+              : null;
+            const isPending = !hasData && loadingExtra && slug != null && !(slug in extraInfo);
+            // Suprimir linhas sem dados (verificadas e sem resultado)
+            if (!isPending && !hasData && slug && slug in extraInfo) return null;
+            return (
+              <a
+                key={i}
+                href={bl.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors ${i > 0 ? "border-t border-border/40" : ""} ${bl.primary ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}`}
+              >
+                <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center">
+                  {iata ? (
+                    <img
+                      src={`https://www.gstatic.com/flights/airline_logos/70px/${iata}.png`}
+                      alt={iata}
+                      className="w-6 h-6 object-contain"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    />
+                  ) : (
+                    <span className="text-base">✈</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className={`font-medium ${bl.primary ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>
+                    {cleanLabel}
+                    {bl.primary && <span className="ml-1.5 text-[10px] text-blue-500 font-normal">· principal</span>}
+                  </span>
+                  {isPending ? (
+                    <div className="mt-0.5">
+                      <span className="inline-block w-3 h-3 border border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                    </div>
+                  ) : hasData ? (
+                    <div className="flex items-center gap-1.5 text-muted-foreground mt-0.5">
+                      <span>{formatMilhas(milhasVal!)}</span>
+                      {taxasStr && (
+                        <><span className="opacity-40">+</span><span>{taxasStr}</span></>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+                {/* BRL destacado à direita */}
+                <div className="flex-shrink-0 text-right">
+                  {hasData && rowInfo?.custo_total_brl != null && (
+                    <span className="text-sm">{renderTotal(rowInfo, cotacoes)}</span>
+                  )}
+                  {!hasData && !isPending && <ExternalLink className="h-3 w-3 text-muted-foreground" />}
+                  {hasData && rowInfo?.custo_total_brl == null && <ExternalLink className="h-3 w-3 text-muted-foreground" />}
+                </div>
+              </a>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function DetailModal({ row, onClose }: { row: ResultRow; onClose: () => void }) {
+function DetailModal({
+  row, onClose, allRows, cotacoes,
+}: {
+  row: ResultRow; onClose: () => void;
+  allRows: ResultRow[]; cotacoes: Cotacoes | null;
+}) {
   const nome = PROGRAM_NAMES[row.programa] || row.programa;
   const availableCabines = CABINES_ORDER.filter((c) => row.cabines[c]);
   const [activeCabine, setActiveCabine] = useState<string>(availableCabines[0] || "economica");
@@ -625,7 +784,7 @@ function DetailModal({ row, onClose }: { row: ResultRow; onClose: () => void }) 
           ) : trips.length > 0 ? (
             <div className="px-4">
               {trips.map((trip) => (
-                <TripCard key={trip.id} trip={trip} nome={nome} programa={row.programa} />
+                <TripCard key={trip.id} trip={trip} nome={nome} programa={row.programa} allRows={allRows} activeCabine={activeCabine} cotacoes={cotacoes} />
               ))}
             </div>
           ) : info ? (
@@ -639,7 +798,7 @@ function DetailModal({ row, onClose }: { row: ResultRow; onClose: () => void }) 
                       <p className="text-sm text-muted-foreground mt-0.5">+ {formatBRL(info.taxas_brl)} em taxas</p>
                     )}
                     {info.custo_total_brl != null && (
-                      <p className="text-sm font-semibold text-foreground">Total: {formatBRL(info.custo_total_brl)}</p>
+                      <p className="text-sm mt-0.5">Total: {renderTotal(info, cotacoes)}</p>
                     )}
                   </div>
                   <span className={`px-3 py-1 rounded text-xs font-bold text-white ${info.paradas === 0 ? "bg-green-600" : "bg-blue-500"}`}>
@@ -857,7 +1016,7 @@ const Resultados = () => {
                                         </span>
                                       )}
                                       {info.custo_total_brl != null && (
-                                        <div className="text-xs text-muted-foreground text-center mt-0.5">
+                                        <div className="text-sm text-center mt-0.5">
                                           {renderTotal(info, cotacoes)}
                                         </div>
                                       )}
@@ -916,7 +1075,7 @@ const Resultados = () => {
 
       {/* Detail modal */}
       {selectedRow && (
-        <DetailModal row={selectedRow} onClose={() => setSelectedRow(null)} />
+        <DetailModal row={selectedRow} onClose={() => setSelectedRow(null)} allRows={rows} cotacoes={cotacoes} />
       )}
     </div>
   );

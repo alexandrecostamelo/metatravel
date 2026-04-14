@@ -7,16 +7,53 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import jwt as _jwt
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
+from app.config import settings
 from app.database import get_session
 from app.models.milhas import CotacaoMilheiro, ProgramaMilhas
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+@router.get("/debug-auth", include_in_schema=False)
+async def debug_auth(request: Request) -> dict:
+    """Diagnóstico de autenticação — remover após resolver o problema."""
+    auth_header = request.headers.get("Authorization", "")
+    secret = settings.supabase_jwt_secret
+
+    result: dict = {
+        "secret_configurado": bool(secret),
+        "secret_tamanho": len(secret) if secret else 0,
+        "header_presente": bool(auth_header),
+        "header_scheme": auth_header.split(" ")[0] if auth_header else None,
+    }
+
+    if auth_header.startswith("Bearer ") and secret:
+        token = auth_header[7:]
+        result["token_tamanho"] = len(token)
+        result["token_partes"] = len(token.split("."))
+        for verificar_aud in (True, False):
+            try:
+                opts = {} if verificar_aud else {"verify_aud": False}
+                payload = _jwt.decode(token, secret, algorithms=["HS256"],
+                                      audience="authenticated" if verificar_aud else None,
+                                      options=opts if not verificar_aud else {}, leeway=10)
+                result[f"decode_aud_{verificar_aud}"] = "ok"
+                result["sub"] = payload.get("sub")
+                result["aud"] = payload.get("aud")
+                result["role"] = payload.get("role")
+                break
+            except Exception as e:
+                result[f"decode_aud_{verificar_aud}"] = f"{type(e).__name__}: {e}"
+
+    return result
 
 
 # ── Schemas ─────────────────────────────────────────────────────────────────
