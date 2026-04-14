@@ -787,7 +787,20 @@ const CABINE_SHORT: Record<string, string> = {
   economica: "Eco", premium_economica: "Prem", executiva: "Exec", primeira: "1ª",
 };
 
-type SavedSearch = { origens: string[]; destinos: string[]; dataIda: string; cabines: string[] };
+const RANGE_OPTIONS = [0, 1, 3, 7, 15, 30, 60] as const;
+
+function gerarDatas(dataBase: string, range: number): string[] {
+  const base = new Date(dataBase + "T00:00:00");
+  const datas: string[] = [];
+  for (let i = -range; i <= range; i++) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + i);
+    datas.push(d.toISOString().slice(0, 10));
+  }
+  return datas;
+}
+
+type SavedSearch = { origens: string[]; destinos: string[]; dataIda: string; cabines: string[]; range?: number };
 
 const LS_KEY = "mt_recent_searches";
 const MAX_RECENTES = 3;
@@ -807,7 +820,8 @@ function saveRecente(s: SavedSearch) {
 function formatRecenteLabel(s: SavedSearch): string {
   const date = s.dataIda ? new Date(s.dataIda + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : "";
   const cabs = s.cabines.length === CABINES_ORDER.length ? "Todas" : s.cabines.map((c) => CABINE_SHORT[c] || c).join(", ");
-  return `${s.origens.join(", ")} → ${s.destinos.join(", ")}  ·  ${date}  ·  ${cabs}`;
+  const rng = s.range ? `  ·  ±${s.range}d` : "";
+  return `${s.origens.join(", ")} → ${s.destinos.join(", ")}  ·  ${date}${rng}  ·  ${cabs}`;
 }
 
 // ─── Main Busca page ──────────────────────────────────────────────────────────
@@ -818,6 +832,7 @@ const Busca = () => {
   const [destinos, setDestinos] = useState<string[]>([]);
   const [dataIda, setDataIda] = useState("");
   const [cabines, setCabines] = useState<string[]>(["economica"]);
+  const [range, setRange] = useState(0);
 
   // Recent searches
   const [recentes, setRecentes] = useState<SavedSearch[]>([]);
@@ -943,6 +958,7 @@ const Busca = () => {
     const _destinos = overrides?.destinos ?? destinos;
     const _dataIda = overrides?.dataIda ?? dataIda;
     const _cabines = overrides?.cabines ?? cabines;
+    const _range = overrides?.range ?? range;
     if (!_origens.length || !_destinos.length || !_dataIda || !_cabines.length) return;
     setLoading(true);
     setError(null);
@@ -954,11 +970,14 @@ const Busca = () => {
     setTableSearch("");
 
     try {
+      const datas = gerarDatas(_dataIda, _range);
       const combos = _origens.flatMap((o) =>
-        _destinos.flatMap((d) => _cabines.map((c) => [o, d, c] as [string, string, string]))
+        _destinos.flatMap((d) =>
+          _cabines.flatMap((c) => datas.map((dt) => [o, d, c, dt] as [string, string, string, string]))
+        )
       );
       const settled = await Promise.allSettled(
-        combos.map(([o, d, c]) => buscarPassagens({ origem: o, destino: d, data_ida: _dataIda, cabine: c }))
+        combos.map(([o, d, c, dt]) => buscarPassagens({ origem: o, destino: d, data_ida: dt, cabine: c }))
       );
       const results = settled
         .filter((r): r is PromiseFulfilledResult<BuscaResponse> => r.status === "fulfilled")
@@ -978,7 +997,7 @@ const Busca = () => {
         cache_hit: results.every((r) => r.cache_hit),
       };
       setResultado(combined);
-      saveRecente({ origens: _origens, destinos: _destinos, dataIda: _dataIda, cabines: _cabines });
+      saveRecente({ origens: _origens, destinos: _destinos, dataIda: _dataIda, cabines: _cabines, range: _range });
       setRecentes(loadRecentes());
     } catch (err: any) {
       setError(err.message || "Erro ao buscar passagens. Tente novamente.");
@@ -995,6 +1014,7 @@ const Busca = () => {
     setDestinos(s.destinos);
     setDataIda(s.dataIda);
     setCabines(s.cabines);
+    setRange(s.range ?? 0);
     setShowRecentes(false);
     handleBuscar(s);
   };
@@ -1035,6 +1055,26 @@ const Busca = () => {
                 onKeyDown={(e) => { if (e.key === "Enter") handleBuscar(); }}
                 className="border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring h-[38px]"
               />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Intervalo</label>
+              <div className="flex items-center gap-1 h-[38px]">
+                {RANGE_OPTIONS.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRange(r)}
+                    className={`px-2 py-1.5 rounded-lg border text-xs font-semibold transition-colors h-full ${
+                      range === r
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-muted-foreground border-border hover:bg-muted"
+                    }`}
+                  >
+                    {r === 0 ? "Exato" : `±${r}d`}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-1">
