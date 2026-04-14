@@ -1,3 +1,5 @@
+import base64
+import json
 import logging
 from typing import Optional
 from uuid import UUID
@@ -12,14 +14,27 @@ _bearer = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
 
 
+def _token_alg(token: str) -> str:
+    """Lê o algoritmo do header JWT sem verificar assinatura."""
+    try:
+        part = token.split(".")[0]
+        part += "=" * (4 - len(part) % 4)
+        header = json.loads(base64.b64decode(part))
+        return header.get("alg", "HS256")
+    except Exception:
+        return "HS256"
+
+
 def _decode(token: str) -> dict:
     secret = settings.supabase_jwt_secret
     if not secret:
         raise ValueError("SUPABASE_JWT_SECRET não configurado")
+    alg = _token_alg(token)
+    print(f"[auth] algoritmo do token: {alg}", flush=True)
     return jwt.decode(
         token,
         secret,
-        algorithms=["HS256"],
+        algorithms=[alg],
         options={"verify_aud": False},
         leeway=10,
     )
