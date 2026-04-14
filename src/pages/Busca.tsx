@@ -833,6 +833,8 @@ const Busca = () => {
   const [dataIda, setDataIda] = useState("");
   const [cabines, setCabines] = useState<string[]>(["economica"]);
   const [range, setRange] = useState(0);
+  const [showCabineRange, setShowCabineRange] = useState(false);
+  const cabineRangeRef = useRef<HTMLDivElement>(null);
 
   // Recent searches
   const [recentes, setRecentes] = useState<SavedSearch[]>([]);
@@ -941,6 +943,18 @@ const Busca = () => {
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Fecha o dropdown cabine/range ao clicar fora
+  useEffect(() => {
+    if (!showCabineRange) return;
+    const handler = (e: MouseEvent) => {
+      if (cabineRangeRef.current && !cabineRangeRef.current.contains(e.target as Node)) {
+        setShowCabineRange(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showCabineRange]);
 
   // Close filter on outside click
   useEffect(() => {
@@ -1057,63 +1071,83 @@ const Busca = () => {
               />
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Intervalo</label>
-              <div className="flex items-center gap-1 h-[38px]">
-                {RANGE_OPTIONS.map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRange(r)}
-                    className={`px-2 py-1.5 rounded-lg border text-xs font-semibold transition-colors h-full ${
-                      range === r
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background text-muted-foreground border-border hover:bg-muted"
-                    }`}
-                  >
-                    {r === 0 ? "Exato" : `±${r}d`}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Cabine + Intervalo — dropdown compacto */}
+            <div className="space-y-1 relative" ref={cabineRangeRef}>
+              <label className="text-xs font-medium text-muted-foreground">Cabine / Intervalo</label>
+              <button
+                type="button"
+                onClick={() => setShowCabineRange((v) => !v)}
+                className="flex items-center justify-between gap-2 h-[38px] px-3 rounded-lg border border-border bg-background text-sm text-foreground hover:bg-muted transition-colors min-w-[160px]"
+              >
+                <span className="truncate text-xs">
+                  {cabines.length === CABINES_ORDER.length ? "Todas" : cabines.map((c) => CABINE_SHORT[c]).join(", ")}
+                  {range > 0 && <span className="text-muted-foreground ml-1">· ±{range}d</span>}
+                </span>
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${showCabineRange ? "rotate-180" : ""}`} />
+              </button>
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Cabine</label>
-              <div className="flex flex-col gap-1 py-1">
-                <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold">
-                  <input
-                    type="checkbox"
-                    checked={cabines.length === CABINES_ORDER.length}
-                    ref={(el) => {
-                      if (el) el.indeterminate = cabines.length > 0 && cabines.length < CABINES_ORDER.length;
-                    }}
-                    onChange={() =>
-                      setCabines(cabines.length === CABINES_ORDER.length ? ["economica"] : [...CABINES_ORDER])
-                    }
-                    className="w-3.5 h-3.5 accent-primary"
-                  />
-                  Marcar todas
-                </label>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 pl-0.5">
-                  {CABINES_ORDER.map((c) => (
-                    <label key={c} className="flex items-center gap-1.5 cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
+              {showCabineRange && (
+                <div className="absolute top-full mt-1 left-0 z-50 bg-card border border-border rounded-xl shadow-lg p-3 w-56 space-y-3">
+                  {/* Cabines */}
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Cabine</p>
+                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold mb-1">
                       <input
                         type="checkbox"
-                        checked={cabines.includes(c)}
-                        onChange={() => {
-                          setCabines((prev) =>
-                            prev.includes(c)
-                              ? prev.length > 1 ? prev.filter((x) => x !== c) : prev
-                              : [...prev, c]
-                          );
+                        checked={cabines.length === CABINES_ORDER.length}
+                        ref={(el) => {
+                          if (el) el.indeterminate = cabines.length > 0 && cabines.length < CABINES_ORDER.length;
                         }}
-                        className="w-3.5 h-3.5 accent-blue-600"
+                        onChange={() =>
+                          setCabines(cabines.length === CABINES_ORDER.length ? ["economica"] : [...CABINES_ORDER])
+                        }
+                        className="w-3.5 h-3.5 accent-primary"
                       />
-                      {CABINE_LABELS[c as Cabine]}
+                      Marcar todas
                     </label>
-                  ))}
+                    <div className="space-y-1 pl-0.5">
+                      {CABINES_ORDER.map((c) => (
+                        <label key={c} className="flex items-center gap-2 cursor-pointer select-none text-xs text-muted-foreground hover:text-foreground">
+                          <input
+                            type="checkbox"
+                            checked={cabines.includes(c)}
+                            onChange={() => {
+                              setCabines((prev) =>
+                                prev.includes(c)
+                                  ? prev.length > 1 ? prev.filter((x) => x !== c) : prev
+                                  : [...prev, c]
+                              );
+                            }}
+                            className="w-3.5 h-3.5 accent-blue-600"
+                          />
+                          {CABINE_LABELS[c as Cabine]}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Intervalo */}
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Intervalo de datas</p>
+                    <div className="flex flex-wrap gap-1">
+                      {RANGE_OPTIONS.map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setRange(r)}
+                          className={`px-2 py-1 rounded-md border text-xs font-semibold transition-colors ${
+                            range === r
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background text-muted-foreground border-border hover:bg-muted"
+                          }`}
+                        >
+                          {r === 0 ? "Exato" : `±${r}d`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <Button
