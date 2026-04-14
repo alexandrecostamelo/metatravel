@@ -9,3 +9,4 @@ pyjwt[crypto]==2.10.1
 cryptography>=42.0.0
 upstash-redis==1.2.0
 airportsdata>=20240101
+duffel-api==1.15.0

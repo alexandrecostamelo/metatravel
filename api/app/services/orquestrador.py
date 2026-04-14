@@ -10,6 +10,7 @@ from app.adapters.seats_aero import SeatsAeroAdapter
 from app.schemas.busca import BuscaRequest
 from app.schemas.oferta import Oferta
 from app.services.cache import cache_get, cache_set
+from app.services.cash_enrichment import enriquecer_com_cash
 from app.services.valoracao import valorar_ofertas
 
 ADAPTERS: list[BaseAdapter] = [
@@ -67,6 +68,10 @@ async def buscar_passagens(
         todas = [o for o in todas if o.programa in slugs]
 
     todas = await valorar_ofertas(session, todas)
+
+    if req.enriquecer_cash:
+        todas = await enriquecer_com_cash(todas, adultos=req.adultos)
+
     print(f"[orquestrador] concluido, total={len(todas)}")
 
     await cache_set(key, _serialize(todas), ttl=900)

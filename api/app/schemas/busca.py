@@ -14,6 +14,7 @@ class BuscaRequest(BaseModel):
     cabine: Cabine = Cabine.ECONOMICA
     adultos: int = Field(default=1, ge=1, le=9)
     programas: list[str] = Field(default_factory=list, description="Slugs dos programas; vazio = todos")
+    enriquecer_cash: bool = Field(default=True, description="Busca preço em dinheiro via Duffel para cálculo de CPM")
 
     @field_validator("origem", "destino", mode="before")
     @classmethod

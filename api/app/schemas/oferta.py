@@ -33,6 +33,15 @@ class Oferta(BaseModel):
     cotacao_milheiro_brl: Optional[Decimal] = None
     custo_total_brl: Optional[Decimal] = None
 
+    # Campos CPM — preenchidos pelo cash_enrichment (Duffel)
+    preco_cash_brl: Optional[Decimal] = None
+    preco_cash_moeda: Optional[str] = None
+    valor_milha_brl: Optional[Decimal] = None       # R$ por milha individual
+    valor_milheiro_brl: Optional[Decimal] = None    # R$ por 1.000 milhas (CPM equivalente)
+    economia_brl: Optional[Decimal] = None          # preco_cash_brl - custo_total_brl
+    economia_percentual: Optional[Decimal] = None   # economia_brl / preco_cash_brl × 100
+    qualidade_resgate: Optional[str] = None         # "excelente" | "bom" | "ok" | "ruim"
+
     link_reserva: Optional[str] = None
     fonte: str
     atualizado_em: datetime = Field(default_factory=datetime.utcnow)

@@ -18,5 +18,7 @@ class Settings(BaseSettings):
 
     cron_secret: str = ""
 
+    duffel_api_key: str = ""
+
 
 settings = Settings()
