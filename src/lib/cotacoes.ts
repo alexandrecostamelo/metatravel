@@ -45,7 +45,7 @@ export function useCotacoes(): { cotacoes: Cotacoes | null; loading: boolean } {
     setLoading(true);
     _fetchPromise
       .then((c) => { _cached = c; setCotacoes(c); })
-      .catch(() => {})
+      .catch((err) => { console.warn("[cotacoes] falha ao buscar taxas:", err); })
       .finally(() => setLoading(false));
   }, []);
 
