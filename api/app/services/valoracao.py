@@ -18,9 +18,8 @@ from app.services.ptax import get_ptax_brl
 _REDIS_KEY = "cotacoes:vigor:all"
 _REDIS_TTL = 300  # 5 minutos
 
-# Fallback em memória (não persiste em serverless — apenas última invocação)
-_mem_cache: dict[str, Decimal] = {}
-_mem_ts: float = 0
+# Cache em memória: usa dict mutável para evitar 'global' em async
+_mem: dict = {"cotacoes": {}, "ts": 0.0}
 _MEM_TTL = 300
 
 
@@ -32,18 +31,18 @@ async def _cotacoes_vigentes(session: AsyncSession) -> dict[str, Decimal]:
     agora = time.monotonic()
 
     # 1. Memória recente
-    if _mem_cache and (agora - _mem_ts) < _MEM_TTL:
-        return dict(_mem_cache)
+    if _mem["cotacoes"] and (agora - _mem["ts"]) < _MEM_TTL:
+        return dict(_mem["cotacoes"])
 
     # 2. Redis
     cached = await cache_get(_REDIS_KEY)
     if cached:
         result = {k: Decimal(str(v)) for k, v in cached.items()}
-        _mem_cache.update(result)
-        return result
+        _mem["cotacoes"] = result
+        _mem["ts"] = agora
+        return dict(result)
 
-    # 3. DB — busca todos os programas SEM WHERE parametrizado
-    # Usa text() com SQL simples sem bind params → asyncpg usa simple query protocol
+    # 3. DB — sem WHERE parametrizado → asyncpg usa simple query protocol
     sql = text("""
         SELECT DISTINCT ON (p.slug)
                p.slug,
@@ -56,18 +55,15 @@ async def _cotacoes_vigentes(session: AsyncSession) -> dict[str, Decimal]:
         rows = (await session.execute(sql)).all()
     except Exception as exc:
         print(f"[valoracao] erro ao buscar cotações do DB: {exc}")
-        return dict(_mem_cache)  # usa o que tiver em memória
+        return dict(_mem["cotacoes"])
 
     result = {slug: Decimal(str(valor)) for slug, valor in rows}
 
-    # Salva nos caches
     await cache_set(_REDIS_KEY, {k: str(v) for k, v in result.items()}, ttl=_REDIS_TTL)
-    global _mem_ts
-    _mem_cache.clear()
-    _mem_cache.update(result)
-    _mem_ts = agora
+    _mem["cotacoes"] = result
+    _mem["ts"] = agora
 
-    return result
+    return dict(result)
 
 
 async def valorar_ofertas(session: AsyncSession, ofertas: list[Oferta]) -> list[Oferta]:
