@@ -733,28 +733,7 @@ function DetailModal({
                     {info.custo_total_brl != null && (
                       <p className="text-sm mt-0.5">Total: {renderTotal(info, cotacoes)}</p>
                     )}
-                    {info.valor_milheiro_brl != null && (
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded text-white ${
-                          info.qualidade_resgate === "excelente" ? "bg-green-600" :
-                          info.qualidade_resgate === "bom" ? "bg-blue-500" :
-                          info.qualidade_resgate === "ok" ? "bg-amber-500" : "bg-red-500"
-                        }`}>
-                          {info.qualidade_resgate}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          R${Number(info.valor_milheiro_brl).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mil milhas
-                        </span>
-                        {info.economia_percentual != null && info.economia_percentual > 0 && (
-                          <span className="text-sm text-green-600 font-medium">↓{Number(info.economia_percentual).toFixed(1)}% vs cash</span>
-                        )}
-                      </div>
-                    )}
-                    {info.preco_cash_brl != null && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Preço em dinheiro: {formatBRL(info.preco_cash_brl)}
-                      </p>
-                    )}
+                    {/* Duffel CPM fields hidden — backend data still available */}
                   </div>
                   <span className={`px-3 py-1 rounded text-xs font-bold text-white ${info.paradas === 0 ? "bg-green-600" : "bg-blue-500"}`}>
                     {info.paradas === 0 ? "Direto" : `${info.paradas} parada${info.paradas > 1 ? "s" : ""}`}
@@ -1472,31 +1451,7 @@ const Busca = () => {
                                         {info.custo_total_brl != null && (
                                           <div className="text-sm mt-0.5">{renderTotal(info, cotacoes)}</div>
                                         )}
-                                        {info.preco_cash_brl != null && (
-                                          <div className="text-[11px] text-muted-foreground mt-0.5 border-t border-border/40 pt-0.5 w-full text-center">
-                                            <span className="opacity-60">cash </span>
-                                            <span className="font-medium text-foreground">{formatBRL(info.preco_cash_brl)}</span>
-                                          </div>
-                                        )}
-                                        {info.valor_milheiro_brl != null && (
-                                          <div className="flex items-center gap-1 mt-0.5">
-                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded text-white ${
-                                              info.qualidade_resgate === "excelente" ? "bg-green-600" :
-                                              info.qualidade_resgate === "bom" ? "bg-blue-500" :
-                                              info.qualidade_resgate === "ok" ? "bg-amber-500" : "bg-red-500"
-                                            }`}>
-                                              {info.qualidade_resgate}
-                                            </span>
-                                            <span className="text-[10px] text-muted-foreground">
-                                              R${Number(info.valor_milheiro_brl).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mil
-                                            </span>
-                                          </div>
-                                        )}
-                                        {info.economia_percentual != null && (
-                                          <span className={`text-[10px] font-medium ${Number(info.economia_percentual) > 0 ? "text-green-600" : "text-red-500"}`}>
-                                            {Number(info.economia_percentual) > 0 ? "↓" : "↑"}{Math.abs(Number(info.economia_percentual)).toFixed(1)}% vs cash
-                                          </span>
-                                        )}
+                                        {/* Duffel CPM fields hidden — backend data still available */}
                                       </div>
                                     ) : (
                                       <span className="inline-block px-2 py-1 rounded text-xs font-semibold bg-muted text-muted-foreground">
