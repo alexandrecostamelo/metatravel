@@ -1,47 +1,79 @@
+"""
+Valoração de ofertas: converte milhas → R$ usando cotação do milheiro e PTAX.
+
+A query de cotações busca TODOS os programas sem WHERE parametrizado,
+evitando DuplicatePreparedStatementError com pgbouncer em transaction mode.
+O resultado é armazenado em Redis (5min) e em memória como fallback.
+"""
 import time
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.milhas import CotacaoMilheiro, ProgramaMilhas
 from app.schemas.oferta import Oferta
+from app.services.cache import cache_get, cache_set
 from app.services.ptax import get_ptax_brl
 
-# Cache em memória de cotações do milheiro: {slug: (valor_brl, timestamp)}
-_cache: dict[str, tuple[Decimal, float]] = {}
-_CACHE_TTL = 300  # 5 minutos
+_REDIS_KEY = "cotacoes:vigor:all"
+_REDIS_TTL = 300  # 5 minutos
+
+# Fallback em memória (não persiste em serverless — apenas última invocação)
+_mem_cache: dict[str, Decimal] = {}
+_mem_ts: float = 0
+_MEM_TTL = 300
 
 
-async def _cotacoes_vigentes(session: AsyncSession, slugs: set[str]) -> dict[str, Decimal]:
-    """Busca a cotação mais recente de cada programa em uma única query."""
+async def _cotacoes_vigentes(session: AsyncSession) -> dict[str, Decimal]:
+    """
+    Retorna {slug: cotacao_brl} para todos os programas com cotação.
+    Ordem: memória → Redis → DB (sem parâmetros para evitar prepared statements).
+    """
     agora = time.monotonic()
-    pendentes = {s for s in slugs if s not in _cache or agora - _cache[s][1] > _CACHE_TTL}
 
-    if pendentes:
-        stmt = (
-            select(ProgramaMilhas.slug, CotacaoMilheiro.valor_brl)
-            .join(CotacaoMilheiro, CotacaoMilheiro.programa_id == ProgramaMilhas.id)
-            .where(ProgramaMilhas.slug.in_(pendentes))
-            .order_by(ProgramaMilhas.slug, CotacaoMilheiro.vigente_desde.desc())
-        )
-        rows = (await session.execute(stmt)).all()
+    # 1. Memória recente
+    if _mem_cache and (agora - _mem_ts) < _MEM_TTL:
+        return dict(_mem_cache)
 
-        vistos: set[str] = set()
-        for slug, valor in rows:
-            if slug not in vistos:
-                _cache[slug] = (valor, agora)
-                vistos.add(slug)
+    # 2. Redis
+    cached = await cache_get(_REDIS_KEY)
+    if cached:
+        result = {k: Decimal(str(v)) for k, v in cached.items()}
+        _mem_cache.update(result)
+        return result
 
-    return {s: _cache[s][0] for s in slugs if s in _cache}
+    # 3. DB — busca todos os programas SEM WHERE parametrizado
+    # Usa text() com SQL simples sem bind params → asyncpg usa simple query protocol
+    sql = text("""
+        SELECT DISTINCT ON (p.slug)
+               p.slug,
+               c.valor_brl
+        FROM   programas_milhas p
+        JOIN   cotacoes_milheiro c ON c.programa_id = p.id
+        ORDER  BY p.slug, c.vigente_desde DESC
+    """)
+    try:
+        rows = (await session.execute(sql)).all()
+    except Exception as exc:
+        print(f"[valoracao] erro ao buscar cotações do DB: {exc}")
+        return dict(_mem_cache)  # usa o que tiver em memória
+
+    result = {slug: Decimal(str(valor)) for slug, valor in rows}
+
+    # Salva nos caches
+    await cache_set(_REDIS_KEY, {k: str(v) for k, v in result.items()}, ttl=_REDIS_TTL)
+    global _mem_ts
+    _mem_cache.clear()
+    _mem_cache.update(result)
+    _mem_ts = agora
+
+    return result
 
 
 async def valorar_ofertas(session: AsyncSession, ofertas: list[Oferta]) -> list[Oferta]:
     """Preenche custo_total_brl em cada oferta e retorna ordenado por R$ asc."""
-    slugs = {o.programa for o in ofertas}
-    cotacoes = await _cotacoes_vigentes(session, slugs)
+    cotacoes = await _cotacoes_vigentes(session)
 
-    # Coleta moedas estrangeiras para buscar PTAX em lote (evita N chamadas)
     moedas_necessarias = {o.taxas_moeda for o in ofertas if o.taxas_moeda != "BRL"}
     ptax: dict[str, Decimal] = {}
     for moeda in moedas_necessarias:
