@@ -57,11 +57,43 @@ async def debug_duffel() -> dict:
         result["auth_erro"] = str(exc)
         return result
 
-    # Testa busca real GRU→MIA
+    # Testa busca real GRU→MIA com data futura
+    from datetime import date, timedelta
+    data_teste = (date.today() + timedelta(days=60)).isoformat()
+    result["data_teste"] = data_teste
+
+    # Chamada direta para ver resposta bruta do Duffel
+    payload = {
+        "data": {
+            "slices": [{"origin": "GRU", "destination": "MIA", "departure_date": data_teste}],
+            "passengers": [{"type": "adult"}],
+            "cabin_class": "economy",
+        }
+    }
     try:
-        cash = await buscar_cash_equivalente("GRU", "MIA", "2025-08-15", Cabine.ECONOMICA, 1)
-        result["busca_resultado"] = cash
-        result["busca_ok"] = cash is not None
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{DUFFEL_BASE}/air/offer_requests",
+                params={"return_offers": "true"},
+                headers={
+                    "Authorization": f"Bearer {settings.duffel_api_key}",
+                    "Duffel-Version": DUFFEL_VERSION,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                json=payload,
+            )
+            result["duffel_status"] = resp.status_code
+            raw = resp.json()
+            offers = raw.get("data", {}).get("offers", [])
+            result["total_ofertas"] = len(offers)
+            if offers:
+                result["primeira_oferta"] = {
+                    "total_amount": offers[0].get("total_amount"),
+                    "total_currency": offers[0].get("total_currency"),
+                }
+            else:
+                result["resposta_parcial"] = str(raw)[:500]
     except Exception as exc:
         result["busca_erro"] = str(exc)
 
