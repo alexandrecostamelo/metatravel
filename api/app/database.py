@@ -7,10 +7,13 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
-# asyncpg + Supavisor transaction mode exige esses connect_args
+# NullPool: cada request abre/fecha sua própria conexão.
+# Necessário em serverless (Vercel) + Supabase pgbouncer transaction mode —
+# evita DuplicatePreparedStatementError pois não há reuso de conexão entre requests.
 _connect_args = {
     "statement_cache_size": 0,
     "prepared_statement_cache_size": 0,
@@ -27,8 +30,8 @@ def _init() -> async_sessionmaker:
             raise RuntimeError("DATABASE_URL não configurada")
         _engine = create_async_engine(
             settings.database_url,
+            poolclass=NullPool,
             connect_args=_connect_args,
-            pool_pre_ping=True,
         )
         _factory = async_sessionmaker(_engine, expire_on_commit=False)
     return _factory
