@@ -138,6 +138,31 @@ async def debug_enrichment(session: AsyncSession = Depends(get_session)) -> dict
         resultado["erro_valoracao"] = str(exc)
         return resultado
 
+    # Testa PTAX diretamente
+    from app.services.ptax import get_ptax_brl, _fetch_awesome, _fetch_bcb
+    try:
+        ptax_usd = await get_ptax_brl("USD")
+        resultado["ptax_usd"] = str(ptax_usd)
+    except Exception as exc:
+        resultado["ptax_usd_erro"] = str(exc)
+        # testa cada fonte individualmente
+        try:
+            resultado["ptax_awesome"] = str(await _fetch_awesome("USD"))
+        except Exception as e:
+            resultado["ptax_awesome_erro"] = str(e)
+        try:
+            resultado["ptax_bcb"] = str(await _fetch_bcb("USD"))
+        except Exception as e:
+            resultado["ptax_bcb_erro"] = str(e)
+
+    # Testa Duffel diretamente com a mesma data do enrichment
+    from app.adapters.duffel import buscar_cash_equivalente
+    try:
+        cash_direto = await buscar_cash_equivalente("GRU", "MIA", str(data_futura), Cabine.ECONOMICA, 1)
+        resultado["duffel_direto"] = cash_direto
+    except Exception as exc:
+        resultado["duffel_direto_erro"] = str(exc)
+
     try:
         ofertas = await enriquecer_com_cash(ofertas, adultos=1)
         o = ofertas[0]
