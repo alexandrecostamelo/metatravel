@@ -100,6 +100,61 @@ async def debug_duffel() -> dict:
     return result
 
 
+@router.get("/debug-enrichment", include_in_schema=False)
+async def debug_enrichment(session: AsyncSession = Depends(get_session)) -> dict:
+    """Testa o pipeline completo de enriquecimento CPM com oferta simulada."""
+    from datetime import date, timedelta
+    from decimal import Decimal
+    from app.schemas.oferta import Cabine, Oferta
+    from app.services.valoracao import valorar_ofertas
+    from app.services.cash_enrichment import enriquecer_com_cash
+
+    data_futura = date.today() + timedelta(days=60)
+
+    oferta = Oferta(
+        origem="GRU", destino="MIA",
+        data_ida=data_futura,
+        cia_aerea="AA", cabine=Cabine.ECONOMICA,
+        paradas=1, programa="smiles",
+        milhas=60000, taxas_moeda="USD", taxas_valor=Decimal("120.00"),
+        fonte="debug",
+    )
+
+    resultado = {
+        "antes_valoracao": {
+            "custo_total_brl": str(oferta.custo_total_brl),
+            "taxas_brl": str(oferta.taxas_brl),
+        }
+    }
+
+    try:
+        ofertas = await valorar_ofertas(session, [oferta])
+        resultado["apos_valoracao"] = {
+            "custo_total_brl": str(ofertas[0].custo_total_brl),
+            "taxas_brl": str(ofertas[0].taxas_brl),
+            "cotacao_milheiro_brl": str(ofertas[0].cotacao_milheiro_brl),
+        }
+    except Exception as exc:
+        resultado["erro_valoracao"] = str(exc)
+        return resultado
+
+    try:
+        ofertas = await enriquecer_com_cash(ofertas, adultos=1)
+        o = ofertas[0]
+        resultado["apos_enrichment"] = {
+            "preco_cash_brl": str(o.preco_cash_brl),
+            "preco_cash_moeda": o.preco_cash_moeda,
+            "valor_milheiro_brl": str(o.valor_milheiro_brl),
+            "economia_brl": str(o.economia_brl),
+            "economia_percentual": str(o.economia_percentual),
+            "qualidade_resgate": o.qualidade_resgate,
+        }
+    except Exception as exc:
+        resultado["erro_enrichment"] = str(exc)
+
+    return resultado
+
+
 @router.get("/debug-auth", include_in_schema=False)
 async def debug_auth(request: Request) -> dict:
     """Diagnóstico de autenticação — remover após resolver o problema."""
