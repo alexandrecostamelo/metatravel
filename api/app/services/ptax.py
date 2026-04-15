@@ -1,11 +1,11 @@
 """
-Cotações de câmbio em BRL.
+Cotações de câmbio para uso interno (valoracao, cash_enrichment).
 
 Ordem de tentativa:
   1. Redis cache (24h)
-  2. BCB PTAX — tenta hoje e até 4 dias úteis anteriores (fins de semana / feriados)
-  3. AwesomeAPI (economia.awesomeapi.com.br) — gratuita, sem chave
-  4. Último valor em memória (fallback dentro da mesma instância)
+  2. AwesomeAPI (economia.awesomeapi.com.br) — gratuita, sem chave, sem restrição de dia útil
+  3. BCB PTAX período (últimos 7 dias) — fallback quando AwesomeAPI falha
+  4. Último valor em memória (dentro da mesma instância)
 """
 import logging
 from datetime import date, timedelta
@@ -18,67 +18,63 @@ from app.services.cache import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
+_AWESOME_URL = "https://economia.awesomeapi.com.br/json/last/{moeda}-BRL"
 _BCB_URL = (
     "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/"
-    "CotacaoMoedaDia(moeda=@moeda,dataCotacao=@dataCotacao)"
+    "CotacaoMoedaPeriodo(moeda=@moeda,dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)"
 )
-_AWESOME_URL = "https://economia.awesomeapi.com.br/json/last/{par}"
 
-# Fallback em memória (útil quando Redis também falha; não persiste em serverless)
 _ultimo_conhecido: dict[str, Decimal] = {}
 
 
 def _redis_key(moeda: str) -> str:
-    # Chave sem data — armazena o valor mais recente independente do dia
     return f"ptax:{moeda}:latest"
 
 
-async def _fetch_bcb(moeda: str) -> Optional[Decimal]:
-    """Tenta BCB para hoje e recua até 4 dias (cobre fins de semana + feriado prolongado)."""
-    for dias_atras in range(5):
-        dia = date.today() - timedelta(days=dias_atras)
-        # BCB só tem cotações em dias úteis (seg–sex)
-        if dia.weekday() >= 5 and dias_atras == 0:
-            continue
-        params = {
-            "@moeda": f"'{moeda}'",
-            "@dataCotacao": f"'{dia.strftime('%m-%d-%Y')}'",
-            "$format": "json",
-            "$select": "cotacaoVenda",
-        }
-        try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                resp = await client.get(_BCB_URL, params=params)
-                resp.raise_for_status()
-                items = resp.json().get("value", [])
-                if items:
-                    return Decimal(str(items[-1]["cotacaoVenda"]))
-        except Exception as exc:
-            logger.warning("[ptax] BCB %s dia %s: %s", moeda, dia, exc)
-    return None
-
-
 async def _fetch_awesome(moeda: str) -> Optional[Decimal]:
-    """AwesomeAPI — gratuita, sem chave, suporta USD/EUR/GBP/AUD/CAD/JPY etc."""
-    par = f"{moeda}-BRL"
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.get(_AWESOME_URL.format(par=par))
+            resp = await client.get(_AWESOME_URL.format(moeda=moeda))
             resp.raise_for_status()
             data = resp.json()
             chave = f"{moeda}BRL"
             if chave in data:
-                return Decimal(str(data[chave]["ask"]))
+                ask = Decimal(str(data[chave]["ask"]))
+                if ask > 0:
+                    return ask
     except Exception as exc:
         logger.warning("[ptax] AwesomeAPI %s: %s", moeda, exc)
     return None
 
 
-async def get_ptax_brl(moeda: str) -> Decimal:
-    """Retorna cotação de venda da moeda em BRL.
+async def _fetch_bcb(moeda: str) -> Optional[Decimal]:
+    hoje = date.today().strftime("%m-%d-%Y")
+    semana = (date.today() - timedelta(days=7)).strftime("%m-%d-%Y")
+    params = {
+        "@moeda": f"'{moeda}'",
+        "@dataInicial": f"'{semana}'",
+        "@dataFinalCotacao": f"'{hoje}'",
+        "$top": "1",
+        "$orderby": "dataHoraCotacao desc",
+        "$format": "json",
+        "$select": "cotacaoVenda",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(_BCB_URL, params=params)
+            resp.raise_for_status()
+            items = resp.json().get("value", [])
+            if items:
+                v = Decimal(str(items[0]["cotacaoVenda"]))
+                if v > 0:
+                    return v
+    except Exception as exc:
+        logger.warning("[ptax] BCB %s: %s", moeda, exc)
+    return None
 
-    Fluxo: Redis → BCB (com retry dias anteriores) → AwesomeAPI → memória → erro.
-    """
+
+async def get_ptax_brl(moeda: str) -> Decimal:
+    """Retorna cotação de venda da moeda em BRL. Nunca retorna None — levanta ValueError se tudo falhar."""
     if moeda == "BRL":
         return Decimal("1")
 
@@ -89,27 +85,26 @@ async def get_ptax_brl(moeda: str) -> Decimal:
     if cached is not None:
         return Decimal(str(cached))
 
-    # 2. BCB PTAX
-    valor = await _fetch_bcb(moeda)
-    if valor is not None:
-        await cache_set(key, str(valor), ttl=86400)
-        _ultimo_conhecido[moeda] = valor
-        return valor
-
-    logger.warning("[ptax] BCB falhou para %s, tentando AwesomeAPI", moeda)
-
-    # 3. AwesomeAPI
+    # 2. AwesomeAPI (primário — sem restrição de dia útil)
     valor = await _fetch_awesome(moeda)
     if valor is not None:
         await cache_set(key, str(valor), ttl=86400)
         _ultimo_conhecido[moeda] = valor
         return valor
 
-    logger.warning("[ptax] AwesomeAPI falhou para %s", moeda)
+    logger.warning("[ptax] AwesomeAPI falhou para %s, tentando BCB", moeda)
+
+    # 3. BCB período (últimos 7 dias)
+    valor = await _fetch_bcb(moeda)
+    if valor is not None:
+        await cache_set(key, str(valor), ttl=86400)
+        _ultimo_conhecido[moeda] = valor
+        return valor
+
+    logger.warning("[ptax] BCB falhou para %s", moeda)
 
     # 4. Último valor em memória
     if moeda in _ultimo_conhecido:
-        logger.warning("[ptax] usando fallback em memória para %s", moeda)
         return _ultimo_conhecido[moeda]
 
-    raise ValueError(f"Não foi possível obter cotação para {moeda} em nenhuma fonte")
+    raise ValueError(f"Não foi possível obter cotação para {moeda}")
