@@ -1472,6 +1472,12 @@ const Busca = () => {
                                         {info.custo_total_brl != null && (
                                           <div className="text-sm mt-0.5">{renderTotal(info, cotacoes)}</div>
                                         )}
+                                        {info.preco_cash_brl != null && (
+                                          <div className="text-[11px] text-muted-foreground mt-0.5 border-t border-border/40 pt-0.5 w-full text-center">
+                                            <span className="opacity-60">cash </span>
+                                            <span className="font-medium text-foreground">{formatBRL(info.preco_cash_brl)}</span>
+                                          </div>
+                                        )}
                                         {info.valor_milheiro_brl != null && (
                                           <div className="flex items-center gap-1 mt-0.5">
                                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded text-white ${
@@ -1486,9 +1492,9 @@ const Busca = () => {
                                             </span>
                                           </div>
                                         )}
-                                        {info.economia_percentual != null && info.economia_percentual > 0 && (
-                                          <span className="text-[10px] text-green-600 font-medium">
-                                            ↓{Number(info.economia_percentual).toFixed(1)}% vs cash
+                                        {info.economia_percentual != null && (
+                                          <span className={`text-[10px] font-medium ${Number(info.economia_percentual) > 0 ? "text-green-600" : "text-red-500"}`}>
+                                            {Number(info.economia_percentual) > 0 ? "↓" : "↑"}{Math.abs(Number(info.economia_percentual)).toFixed(1)}% vs cash
                                           </span>
                                         )}
                                       </div>
