@@ -128,6 +128,13 @@ async def get_cotacoes() -> CotacoesResponse:
         for m in MOEDAS:
             rates.setdefault(m, 0.0)
         await cache_set(CACHE_KEY, rates, ttl=CACHE_TTL)
+
+        # Popula cache do ptax (sem spread) para uso interno de valoracao/cash_enrichment
+        for moeda, taxa_com_spread in rates.items():
+            if taxa_com_spread > 0:
+                taxa_base = round(taxa_com_spread / TURISMO_SPREAD, 4)
+                await cache_set(f"ptax:{moeda}:latest", str(taxa_base), ttl=CACHE_TTL)
+
         _mem_cache = rates
         _mem_ts = time.time()
         return CotacoesResponse(**rates)

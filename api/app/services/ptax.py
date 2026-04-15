@@ -107,4 +107,14 @@ async def get_ptax_brl(moeda: str) -> Decimal:
     if moeda in _ultimo_conhecido:
         return _ultimo_conhecido[moeda]
 
+    # 5. Fallback: lê do cache do /api/cotacoes (populado pelo frontend)
+    cotacoes_cache = await cache_get("cotacoes:frontend:v2")
+    if cotacoes_cache and moeda in cotacoes_cache:
+        taxa_com_spread = Decimal(str(cotacoes_cache[moeda]))
+        valor = (taxa_com_spread / Decimal("1.04")).quantize(Decimal("0.0001"))
+        await cache_set(key, str(valor), ttl=3600)
+        _ultimo_conhecido[moeda] = valor
+        logger.info("[ptax] usando cotacoes:frontend:v2 para %s: %s", moeda, valor)
+        return valor
+
     raise ValueError(f"Não foi possível obter cotação para {moeda}")
