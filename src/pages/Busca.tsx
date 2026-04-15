@@ -78,6 +78,10 @@ type CabineInfo = {
   milhas: number; paradas: number; link_reserva: string | null;
   taxas_brl: number | null; taxas_valor: number; taxas_moeda: string;
   custo_total_brl: number | null;
+  preco_cash_brl: number | null;
+  valor_milheiro_brl: number | null;
+  economia_percentual: number | null;
+  qualidade_resgate: string | null;
 };
 
 type ResultRow = {
@@ -144,6 +148,10 @@ function groupOfertas(ofertas: Oferta[]): ResultRow[] {
       milhas: o.milhas, paradas: o.paradas, link_reserva: o.link_reserva,
       taxas_brl: o.taxas_brl, taxas_valor: o.taxas_valor,
       taxas_moeda: o.taxas_moeda, custo_total_brl: o.custo_total_brl,
+      preco_cash_brl: o.preco_cash_brl ?? null,
+      valor_milheiro_brl: o.valor_milheiro_brl ?? null,
+      economia_percentual: o.economia_percentual ?? null,
+      qualidade_resgate: o.qualidade_resgate ?? null,
     };
     if (o.atualizado_em > row.atualizado_em) row.atualizado_em = o.atualizado_em;
   }
@@ -724,6 +732,28 @@ function DetailModal({
                     )}
                     {info.custo_total_brl != null && (
                       <p className="text-sm mt-0.5">Total: {renderTotal(info, cotacoes)}</p>
+                    )}
+                    {info.valor_milheiro_brl != null && (
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded text-white ${
+                          info.qualidade_resgate === "excelente" ? "bg-green-600" :
+                          info.qualidade_resgate === "bom" ? "bg-blue-500" :
+                          info.qualidade_resgate === "ok" ? "bg-amber-500" : "bg-red-500"
+                        }`}>
+                          {info.qualidade_resgate}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          R${Number(info.valor_milheiro_brl).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mil milhas
+                        </span>
+                        {info.economia_percentual != null && info.economia_percentual > 0 && (
+                          <span className="text-sm text-green-600 font-medium">↓{Number(info.economia_percentual).toFixed(1)}% vs cash</span>
+                        )}
+                      </div>
+                    )}
+                    {info.preco_cash_brl != null && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Preço em dinheiro: {formatBRL(info.preco_cash_brl)}
+                      </p>
                     )}
                   </div>
                   <span className={`px-3 py-1 rounded text-xs font-bold text-white ${info.paradas === 0 ? "bg-green-600" : "bg-blue-500"}`}>
@@ -1441,6 +1471,25 @@ const Busca = () => {
                                         )}
                                         {info.custo_total_brl != null && (
                                           <div className="text-sm mt-0.5">{renderTotal(info, cotacoes)}</div>
+                                        )}
+                                        {info.valor_milheiro_brl != null && (
+                                          <div className="flex items-center gap-1 mt-0.5">
+                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded text-white ${
+                                              info.qualidade_resgate === "excelente" ? "bg-green-600" :
+                                              info.qualidade_resgate === "bom" ? "bg-blue-500" :
+                                              info.qualidade_resgate === "ok" ? "bg-amber-500" : "bg-red-500"
+                                            }`}>
+                                              {info.qualidade_resgate}
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground">
+                                              R${Number(info.valor_milheiro_brl).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mil
+                                            </span>
+                                          </div>
+                                        )}
+                                        {info.economia_percentual != null && info.economia_percentual > 0 && (
+                                          <span className="text-[10px] text-green-600 font-medium">
+                                            ↓{Number(info.economia_percentual).toFixed(1)}% vs cash
+                                          </span>
                                         )}
                                       </div>
                                     ) : (

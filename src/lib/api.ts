@@ -37,6 +37,14 @@ export interface Oferta {
   link_reserva: string | null;
   fonte: string;
   atualizado_em: string;
+  // Campos CPM (Duffel)
+  preco_cash_brl: number | null;
+  preco_cash_moeda: string | null;
+  valor_milha_brl: number | null;
+  valor_milheiro_brl: number | null;
+  economia_brl: number | null;
+  economia_percentual: number | null;
+  qualidade_resgate: string | null;
 }
 
 export interface BuscaResponse {
