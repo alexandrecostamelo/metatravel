@@ -22,6 +22,52 @@ from app.models.milhas import CotacaoMilheiro, ProgramaMilhas
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
+@router.get("/debug-duffel", include_in_schema=False)
+async def debug_duffel() -> dict:
+    """Diagnóstico da integração Duffel — testa chave e faz chamada de exemplo."""
+    from app.adapters.duffel import buscar_cash_equivalente, DUFFEL_BASE, DUFFEL_VERSION
+    from app.schemas.oferta import Cabine
+    import httpx
+
+    result: dict = {
+        "chave_configurada": bool(settings.duffel_api_key),
+        "chave_prefixo": settings.duffel_api_key[:12] + "..." if settings.duffel_api_key else None,
+    }
+
+    if not settings.duffel_api_key:
+        result["erro"] = "DUFFEL_API_KEY não configurada"
+        return result
+
+    # Testa autenticação com uma chamada mínima
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{DUFFEL_BASE}/air/airports?iata_code=GRU",
+                headers={
+                    "Authorization": f"Bearer {settings.duffel_api_key}",
+                    "Duffel-Version": DUFFEL_VERSION,
+                    "Accept": "application/json",
+                },
+            )
+            result["auth_status"] = resp.status_code
+            if resp.status_code != 200:
+                result["auth_erro"] = resp.text[:300]
+                return result
+    except Exception as exc:
+        result["auth_erro"] = str(exc)
+        return result
+
+    # Testa busca real GRU→MIA
+    try:
+        cash = await buscar_cash_equivalente("GRU", "MIA", "2025-08-15", Cabine.ECONOMICA, 1)
+        result["busca_resultado"] = cash
+        result["busca_ok"] = cash is not None
+    except Exception as exc:
+        result["busca_erro"] = str(exc)
+
+    return result
+
+
 @router.get("/debug-auth", include_in_schema=False)
 async def debug_auth(request: Request) -> dict:
     """Diagnóstico de autenticação — remover após resolver o problema."""
