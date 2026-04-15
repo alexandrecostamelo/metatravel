@@ -88,9 +88,20 @@ async def debug_duffel() -> dict:
             offers = raw.get("data", {}).get("offers", [])
             result["total_ofertas"] = len(offers)
             if offers:
+                o = offers[0]
+                result["primeira_oferta_campos"] = sorted(o.keys())
                 result["primeira_oferta"] = {
-                    "total_amount": offers[0].get("total_amount"),
-                    "total_currency": offers[0].get("total_currency"),
+                    "id": o.get("id"),
+                    "total_amount": o.get("total_amount"),
+                    "total_currency": o.get("total_currency"),
+                    "expires_at": o.get("expires_at"),
+                    "owner": o.get("owner"),
+                    "payment_requirements": o.get("payment_requirements"),
+                    # campos de link/booking se existirem
+                    "booking_url": o.get("booking_url"),
+                    "deep_link": o.get("deep_link"),
+                    "airline_url": o.get("airline_url"),
+                    "source": o.get("source"),
                 }
             else:
                 result["resposta_parcial"] = str(raw)[:500]
